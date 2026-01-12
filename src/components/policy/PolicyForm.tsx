@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PolicyStatus, PolicyPriority } from '@/types';
+import { PolicyPriority } from '@/types';
 import { RWANDA_MINISTRIES } from '@/constants';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -42,15 +42,7 @@ export default function PolicyForm({ onSubmit, initialData, isSubmitting }: Poli
     defaultValues: initialData,
   });
 
-  const [objectives, setObjectives] = useState<string[]>(initialData?.objectives ? initialData.objectives.split('\n') : ['']);
-
-  const addObjective = () => {
-    setObjectives([...objectives, '']);
-  };
-
-  const removeObjective = (index: number) => {
-    setObjectives(objectives.filter((_, i) => i !== index));
-  };
+  // objectives are handled as a single textarea value via react-hook-form
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

@@ -12,7 +12,7 @@ interface TableProps<T> {
   onRowClick?: (row: T) => void;
 }
 
-export default function Table<T extends Record<string, unknown>>({ 
+export default function Table<T extends object>({ 
   data, 
   columns, 
   onRowClick 
@@ -21,7 +21,7 @@ export default function Table<T extends Record<string, unknown>>({
     if (typeof column.accessor === 'function') {
       return column.accessor(row);
     }
-    return row[column.accessor] as ReactNode;
+    return (row as any)[column.accessor] as ReactNode;
   };
 
   return (

@@ -1,4 +1,3 @@
-import { SelectHTMLAttributes, forwardRef } from 'react';
 import { useState, useRef, useEffect } from 'react';
 
 export interface SelectOption {
@@ -12,11 +11,12 @@ export interface SelectProps {
   options: SelectOption[];
   value?: string;
   placeholder?: string;
+  required?: boolean;
   // onChange receives a synthetic event-like object with target.value
   onChange?: (e: { target: { value: string } }) => void;
   // support react-hook-form register props
   name?: string;
-  onBlur?: () => void;
+  onBlur?: (e?: any) => void;
   ref?: any;
 }
 

@@ -38,7 +38,7 @@ export default function PolicyDetailPage() {
     try {
       setLoading(true);
       const data = await mockApi.policies.getById(policyId);
-      setPolicy(data);
+      setPolicy(data ?? null);
     } catch (error) {
       console.error('Failed to load policy:', error);
     } finally {

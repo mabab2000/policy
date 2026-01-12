@@ -76,9 +76,9 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   return (...args: Parameters<T>) => {
-    if (timeout) clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout as any);
     timeout = setTimeout(() => func(...args), wait);
   };
 }
@@ -101,17 +101,14 @@ export function downloadAsFile(data: string, filename: string, type: string) {
 /**
  * Export to CSV
  */
-export function exportToCSV<T extends Record<string, unknown>>(
-  data: T[],
-  filename: string
-) {
+export function exportToCSV<T>(data: T[], filename: string) {
   if (data.length === 0) return;
 
-  const headers = Object.keys(data[0]);
+  const headers = Object.keys(data[0] as Record<string, unknown>);
   const csv = [
     headers.join(','),
     ...data.map(row =>
-      headers.map(header => JSON.stringify(row[header] ?? '')).join(',')
+      headers.map(header => JSON.stringify((row as any)[header] ?? '')).join(',')
     ),
   ].join('\n');
 
