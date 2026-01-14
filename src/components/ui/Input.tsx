@@ -21,7 +21,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           type={type}
           ref={ref}
           className={cn(
-            'w-full px-3 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors',
+            // keep a consistent border width so focus doesn't shift layout
+            'w-full px-3 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 transition-colors',
             error
               ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
               : 'border-primary-300 focus:border-primary-500 focus:ring-primary-500',

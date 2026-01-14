@@ -49,15 +49,7 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Side - Branding */}
         <div className="flex flex-col justify-center">
-          <div className="mb-8">
-            <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-primary-600 to-success-600 mb-4" />
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              polucy 360
-            </h1>
-            <p className="text-lg text-gray-600">
-              Complete Policy Lifecycle Management Platform
-            </p>
-          </div>
+          {/* Branding header removed per request (title and logo) */}
 
           <div className="space-y-4">
             <div className="flex items-start gap-3">
@@ -77,7 +69,7 @@ export default function LoginPage() {
                 <span className="text-success-600 font-bold">2</span>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Imihigo Integration</h3>
+                <h3 className="font-semibold text-gray-900">KPI management</h3>
                 <p className="text-sm text-gray-600">
                   Performance contracts aligned with national goals
                 </p>
@@ -104,7 +96,7 @@ export default function LoginPage() {
             <CardHeader>
               <CardTitle>Sign In to Your Account</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 {error && (
                   <div className="p-3 bg-red-50 border-2 border-red-200 rounded-lg text-red-700 text-sm">
@@ -144,7 +136,7 @@ export default function LoginPage() {
           </Card>
 
           <p className="mt-4 text-center text-sm text-gray-600">
-            Powered by Rwanda Government Digital Transformation
+            Powered by Rwanda Artificial intelli (AI)
           </p>
         </div>
       </div>
