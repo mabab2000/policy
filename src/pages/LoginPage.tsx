@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,8 +33,13 @@ export default function LoginPage() {
     try {
       setIsSubmitting(true);
       setError('');
-      await login(data.email, data.password);
-      navigate('/dashboard');
+      const projectIds = await login(data.email, data.password);
+      if (projectIds && projectIds.length > 0) {
+        navigate('/dashboard');
+      } else {
+        // If user has no projects, direct them to create-project page
+        navigate('/projects/create');
+      }
     } catch (err) {
       setError('Invalid credentials. Please try again.');
     } finally {
@@ -135,9 +140,10 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          <p className="mt-4 text-center text-sm text-gray-600">
-            Powered by Rwanda Artificial intelli (AI)
-          </p>
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600">Don't have an account? <Link to="/create-account" className="text-primary-600 font-medium hover:underline">Create one</Link></p>
+            <p className="mt-2 text-sm text-gray-600">Powered by Rwanda Artificial intelli (AI)</p>
+          </div>
         </div>
       </div>
     </div>

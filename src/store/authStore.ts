@@ -1,11 +1,12 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import { User, UserRole } from '@/types';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<string[]>;
   logout: () => void;
   initializeAuth: () => void;
   hasRole: (roles: UserRole[]) => boolean;
@@ -15,79 +16,10 @@ interface AuthState {
 /**
  * Mock Authentication - Replace with real API calls
  */
-const mockLogin = async (email: string, _password: string): Promise<{ user: User; token: string }> => {
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Mock users
-  const mockUsers: Record<string, User> = {
-    'admin@gmail.com': {
-      id: '1',
-      email: 'admin@gmail.com',
-      name: 'John Mukiza',
-      role: UserRole.SUPER_ADMIN,
-      institution: 'Office of the Prime Minister',
-      avatar: 'https://ui-avatars.com/api/?name=John+Mukiza',
-      createdAt: new Date(),
-    },
-    'ministry@gov.rw': {
-      id: '2',
-      email: 'ministry@gov.rw',
-      name: 'Marie Uwase',
-      role: UserRole.MINISTRY_OFFICER,
-      institution: 'Ministry of Finance and Economic Planning',
-      avatar: 'https://ui-avatars.com/api/?name=Marie+Uwase',
-      createdAt: new Date(),
-    },
-    'district@gov.rw': {
-      id: '3',
-      email: 'district@gov.rw',
-      name: 'Paul Habimana',
-      role: UserRole.DISTRICT_OFFICER,
-      institution: 'Gasabo District',
-      district: 'Gasabo',
-      avatar: 'https://ui-avatars.com/api/?name=Paul+Habimana',
-      createdAt: new Date(),
-    },
-    'sector@gov.rw': {
-      id: '4',
-      email: 'sector@gov.rw',
-      name: 'Claire Umutesi',
-      role: UserRole.SECTOR_OFFICER,
-      district: 'Gasabo',
-      sector: 'Remera',
-      avatar: 'https://ui-avatars.com/api/?name=Claire+Umutesi',
-      createdAt: new Date(),
-    },
-    'citizen@example.com': {
-      id: '5',
-      email: 'citizen@example.com',
-      name: 'Jean Niyonzima',
-      role: UserRole.CITIZEN,
-      district: 'Gasabo',
-      avatar: 'https://ui-avatars.com/api/?name=Jean+Niyonzima',
-      createdAt: new Date(),
-    },
-    'auditor@gov.rw': {
-      id: '6',
-      email: 'auditor@gov.rw',
-      name: 'Grace Kagabo',
-      role: UserRole.AUDITOR,
-      institution: 'Office of the Auditor General',
-      avatar: 'https://ui-avatars.com/api/?name=Grace+Kagabo',
-      createdAt: new Date(),
-    },
-  };
-
-  const user = mockUsers[email];
-  if (!user) {
-    throw new Error('Invalid credentials');
-  }
-
-  return {
-    user,
-    token: 'mock-jwt-token-' + user.id,
-  };
+// Real login against local auth service
+const performLogin = async (email: string, password: string): Promise<{ token: string; project_ids: string[]; user_id?: string }> => {
+  const res = await axios.post('https://policy-users-go.onrender.com/api/login', { email, password }, { headers: { 'Content-Type': 'application/json' } });
+  return res.data;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -97,12 +29,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (email: string, password: string) => {
     try {
-      const { user, token } = await mockLogin(email, password);
-      
+      const data = await performLogin(email, password);
+      let token: string = data.token || '';
+      // normalize token: remove leading 'Bearer ' if present
+      if (token.toLowerCase().startsWith('bearer ')) {
+        token = token.split(' ')[1];
+      }
+      const projectIds: string[] = data.project_ids || [];
+
+      // minimal user object to keep app functioning until full profile is fetched
+      const user = {
+        id: data.user_id || 'unknown',
+        email,
+        name: email.split('@')[0],
+        role: UserRole.CITIZEN,
+        createdAt: new Date(),
+      } as User;
+
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      
+      localStorage.setItem('project_ids', JSON.stringify(projectIds));
+
       set({ user, token, isAuthenticated: true });
+
+      return projectIds;
     } catch (error) {
       throw error;
     }

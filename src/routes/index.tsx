@@ -13,6 +13,8 @@ import ExecutionPage from '@/pages/ExecutionPage';
 import MonitoringPage from '@/pages/MonitoringPage';
 import CitizenFeedbackPage from '@/pages/CitizenFeedbackPage';
 import LegalCabinetPage from '@/pages/LegalCabinetPage';
+import CreateAccountPage from '@/pages/CreateAccountPage';
+import CreateProjectPage from '@/pages/CreateProjectPage';
 
 export function AppRoutes() {
   return (
@@ -110,6 +112,14 @@ export function AppRoutes() {
         }
       />
       <Route
+        path="/projects/create"
+        element={
+          <ProtectedRoute>
+            <CreateProjectPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/citizen-feedback"
         element={
           <ProtectedRoute>
@@ -125,6 +135,8 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/create-account" element={<CreateAccountPage />} />
 
       {/* Redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />

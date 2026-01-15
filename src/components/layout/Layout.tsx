@@ -50,7 +50,7 @@ const navigation: NavItem[] = [
     icon: <Database className="h-5 w-5" />,
     label: 'Data Collection',
     path: '/data-collection',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.AUDITOR],
+    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.AUDITOR, UserRole.CITIZEN],
   },
   {
     icon: <Users className="h-5 w-5" />,
