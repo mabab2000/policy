@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,21 +21,31 @@ const policySchema = z.object({
   alignmentVision2050: z.string().min(20, 'Vision 2050 alignment is required'),
   alignmentNST: z.string().min(20, 'NST alignment is required'),
   ministry: z.string().min(1, 'Ministry selection is required'),
-  budget: z.string().optional(),
 });
 
 type PolicyFormData = z.infer<typeof policySchema>;
+
+export interface PolicyFormHandles {
+  submit: () => Promise<void>;
+  validateStep: (step: number) => Promise<boolean>;
+}
 
 interface PolicyFormProps {
   onSubmit: (data: PolicyFormData) => Promise<void>;
   initialData?: Partial<PolicyFormData>;
   isSubmitting?: boolean;
+  showActions?: boolean;
+  visibleStep?: number | undefined;
 }
 
-export default function PolicyForm({ onSubmit, initialData, isSubmitting }: PolicyFormProps) {
+const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function PolicyForm(
+  { onSubmit, initialData, isSubmitting, showActions = true, visibleStep },
+  ref
+) {
   const {
     register,
     handleSubmit,
+    trigger,
     formState: { errors },
   } = useForm<PolicyFormData>({
     resolver: zodResolver(policySchema),
@@ -44,146 +54,172 @@ export default function PolicyForm({ onSubmit, initialData, isSubmitting }: Poli
 
   // objectives are handled as a single textarea value via react-hook-form
 
+  const doSubmit = handleSubmit(async (data) => {
+    await onSubmit(data);
+  });
+
+  useImperativeHandle(ref, () => ({
+    submit: async () => {
+      await doSubmit();
+    },
+    validateStep: async (step: number) => {
+      const stepFields: Record<number, string[]> = {
+        1: ['title', 'code', 'description', 'problemStatement', 'targetPopulation'],
+        2: ['objectives'],
+        3: ['alignmentVision2050', 'alignmentNST'],
+        4: ['ministry', 'priority'],
+      };
+      const fields = stepFields[step] || [];
+      if (fields.length === 0) return true;
+      const res = await trigger(fields as any);
+      return res;
+    },
+  }));
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Basic Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <form onSubmit={doSubmit} className="space-y-6">
+      {(visibleStep === undefined || visibleStep === 1) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Policy Title"
+                {...register('title')}
+                error={errors.title?.message}
+                placeholder="e.g., Digital Rwanda 2030 Strategy"
+                required
+              />
+              <Input
+                label="Policy Code"
+                {...register('code')}
+                error={errors.code?.message}
+                placeholder="e.g., POL-2024-001"
+                required
+              />
+            </div>
+
+            <Textarea
+              label="Description"
+              {...register('description')}
+              error={errors.description?.message}
+              placeholder="Provide a comprehensive description of the policy..."
+              rows={4}
+              required
+            />
+
+            <Textarea
+              label="Problem Statement"
+              {...register('problemStatement')}
+              error={errors.problemStatement?.message}
+              placeholder="What problem does this policy address?"
+              rows={3}
+              required
+            />
+
             <Input
-              label="Policy Title"
-              {...register('title')}
-              error={errors.title?.message}
-              placeholder="e.g., Digital Rwanda 2030 Strategy"
+              label="Target Population"
+              {...register('targetPopulation')}
+              error={errors.targetPopulation?.message}
+              placeholder="e.g., All Rwandan citizens, SMEs, Youth..."
               required
             />
-            <Input
-              label="Policy Code"
-              {...register('code')}
-              error={errors.code?.message}
-              placeholder="e.g., POL-2024-001"
+          </CardContent>
+        </Card>
+      )}
+
+      {(visibleStep === undefined || visibleStep === 2) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Objectives</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              label="Policy Objectives (one per line)"
+              {...register('objectives')}
+              error={errors.objectives?.message}
+              placeholder="List the key objectives..."
+              rows={5}
               required
+              helperText="Enter each objective on a new line"
             />
-          </div>
+          </CardContent>
+        </Card>
+      )}
 
-          <Textarea
-            label="Description"
-            {...register('description')}
-            error={errors.description?.message}
-            placeholder="Provide a comprehensive description of the policy..."
-            rows={4}
-            required
-          />
-
-          <Textarea
-            label="Problem Statement"
-            {...register('problemStatement')}
-            error={errors.problemStatement?.message}
-            placeholder="What problem does this policy address?"
-            rows={3}
-            required
-          />
-
-          <Input
-            label="Target Population"
-            {...register('targetPopulation')}
-            error={errors.targetPopulation?.message}
-            placeholder="e.g., All Rwandan citizens, SMEs, Youth..."
-            required
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Objectives</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Textarea
-            label="Policy Objectives (one per line)"
-            {...register('objectives')}
-            error={errors.objectives?.message}
-            placeholder="List the key objectives..."
-            rows={5}
-            required
-            helperText="Enter each objective on a new line"
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Strategic Alignment</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            label="Alignment with Vision 2050"
-            {...register('alignmentVision2050')}
-            error={errors.alignmentVision2050?.message}
-            placeholder="How does this policy align with Rwanda Vision 2050?"
-            rows={3}
-            required
-          />
-
-          <Textarea
-            label="Alignment with National Strategy for Transformation (NST)"
-            {...register('alignmentNST')}
-            error={errors.alignmentNST?.message}
-            placeholder="How does this policy support NST priority areas?"
-            rows={3}
-            required
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Implementation Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="Responsible Ministry"
-              {...register('ministry')}
-              options={RWANDA_MINISTRIES.map(m => ({ value: m, label: m }))}
-              error={errors.ministry?.message}
+      {(visibleStep === undefined || visibleStep === 3) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Strategic Alignment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              label="Alignment with Vision 2050"
+              {...register('alignmentVision2050')}
+              error={errors.alignmentVision2050?.message}
+              placeholder="How does this policy align with Rwanda Vision 2050?"
+              rows={3}
               required
             />
 
-            <Select
-              label="Priority Level"
-              {...register('priority')}
-              options={[
-                { value: PolicyPriority.CRITICAL, label: 'Critical' },
-                { value: PolicyPriority.HIGH, label: 'High' },
-                { value: PolicyPriority.MEDIUM, label: 'Medium' },
-                { value: PolicyPriority.LOW, label: 'Low' },
-              ]}
-              error={errors.priority?.message}
+            <Textarea
+              label="Alignment with National Strategy for Transformation (NST)"
+              {...register('alignmentNST')}
+              error={errors.alignmentNST?.message}
+              placeholder="How does this policy support NST priority areas?"
+              rows={3}
               required
             />
-          </div>
+          </CardContent>
+        </Card>
+      )}
 
-          <Input
-            label="Estimated Budget (RWF)"
-            type="number"
-            {...register('budget')}
-            error={errors.budget?.message}
-            placeholder="e.g., 50000000000"
-          />
-        </CardContent>
-      </Card>
+      {(visibleStep === undefined || visibleStep === 4) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Implementation Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                label="Responsible Ministry"
+                {...register('ministry')}
+                options={RWANDA_MINISTRIES.map(m => ({ value: m, label: m }))}
+                error={errors.ministry?.message}
+                required
+              />
 
-      <div className="flex justify-end gap-3">
-        <Button type="button" variant="outline" size="lg">
-          Cancel
-        </Button>
-        <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting}>
-          {initialData ? 'Update Policy' : 'Create Policy'}
-        </Button>
-      </div>
+              <Select
+                label="Priority Level"
+                {...register('priority')}
+                options={[
+                  { value: PolicyPriority.CRITICAL, label: 'Critical' },
+                  { value: PolicyPriority.HIGH, label: 'High' },
+                  { value: PolicyPriority.MEDIUM, label: 'Medium' },
+                  { value: PolicyPriority.LOW, label: 'Low' },
+                ]}
+                error={errors.priority?.message}
+                required
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showActions && (
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" size="lg">
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting}>
+            {initialData ? 'Update Policy' : 'Create Policy'}
+          </Button>
+        </div>
+      )}
     </form>
   );
-}
+});
+
+export default PolicyForm;

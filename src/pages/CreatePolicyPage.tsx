@@ -22,7 +22,6 @@ export default function CreatePolicyPage() {
         ...data,
         objectives,
         status: PolicyStatus.DRAFT,
-        budget: data.budget ? Number(data.budget) : undefined,
         responsibleOfficer: user?.name || '',
         createdBy: user?.id || '',
       };
