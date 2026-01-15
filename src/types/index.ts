@@ -192,6 +192,7 @@ export interface ProgressReport {
   nextSteps: string;
   evidenceUrls: string[];
   reportedBy: string;
+  status?: 'potential' | 'approved' | 'rejected' | string;
 }
 
 export interface Risk {

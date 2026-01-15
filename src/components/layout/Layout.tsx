@@ -56,6 +56,12 @@ const navigation: NavItem[] = [
     roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
   },
   {
+    icon: <BarChart3 className="h-5 w-5" />,
+    label: 'Data Review',
+    path: '/data-review',
+    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
+  },
+  {
     icon: <MessageSquare className="h-5 w-5" />,
     label: 'Citizen Feedback',
     path: '/citizen-feedback',

@@ -10,6 +10,8 @@ import DataCollectionPage from '@/pages/DataCollectionPage';
 import ImplementationPage from '@/pages/ImplementationPage';
 import ImihigoPage from '@/pages/ImihigoPage';
 import MonitoringPage from '@/pages/MonitoringPage';
+import SettingsPage from '../pages/SettingsPage';
+import DataReviewPage from '@/pages/DataReviewPage';
 import CitizenFeedbackPage from '@/pages/CitizenFeedbackPage';
 import LegalCabinetPage from '@/pages/LegalCabinetPage';
 import CreateAccountPage from '@/pages/CreateAccountPage';
@@ -80,6 +82,14 @@ export function AppRoutes() {
         }
       />
       <Route
+        path="/data-review"
+        element={
+          <ProtectedRoute>
+            <DataReviewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/imihigo"
         element={
           <ProtectedRoute>
@@ -93,6 +103,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <MonitoringPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />
