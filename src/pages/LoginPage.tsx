@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import logoUrl from '/logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -57,7 +58,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="mb-8 flex justify-center">
             <img 
-              src="/logo.png" 
+              src={logoUrl} 
               alt="Policy 360 Logo" 
               className="h-32 w-auto"
             />
