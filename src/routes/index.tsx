@@ -6,10 +6,9 @@ import PoliciesPage from '@/pages/PoliciesPage';
 import CreatePolicyPage from '@/pages/CreatePolicyPage';
 import PolicyDetailPage from '@/pages/PolicyDetailPage';
 import DataCollectionPage from '@/pages/DataCollectionPage';
-import StakeholdersPage from '@/pages/StakeholdersPage';
+
 import ImplementationPage from '@/pages/ImplementationPage';
 import ImihigoPage from '@/pages/ImihigoPage';
-import ExecutionPage from '@/pages/ExecutionPage';
 import MonitoringPage from '@/pages/MonitoringPage';
 import CitizenFeedbackPage from '@/pages/CitizenFeedbackPage';
 import LegalCabinetPage from '@/pages/LegalCabinetPage';
@@ -71,14 +70,7 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/stakeholders"
-        element={
-          <ProtectedRoute>
-            <StakeholdersPage />
-          </ProtectedRoute>
-        }
-      />
+      
       <Route
         path="/implementation"
         element={
@@ -95,14 +87,7 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/execution"
-        element={
-          <ProtectedRoute>
-            <ExecutionPage />
-          </ProtectedRoute>
-        }
-      />
+  
       <Route
         path="/monitoring"
         element={

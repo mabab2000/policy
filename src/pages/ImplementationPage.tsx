@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { 
@@ -235,24 +236,7 @@ export default function ImplementationPage() {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Implementation Planning</h1>
-            <p className="text-gray-600 mt-1">Convert policies into programs, projects, and activities</p>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Filter
-            </Button>
-            <Button variant="primary" className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              New Program
-            </Button>
-          </div>
-        </div>
+      <div className="space-y-0 py-0">
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -341,11 +325,14 @@ export default function ImplementationPage() {
                   {
                     header: 'Program Name',
                     accessor: (row: Program) => (
-                      <div>
-                        <div className="font-medium text-gray-900">{row.name}</div>
-                        <p className="text-sm text-gray-500">{row.description}</p>
-                        <p className="text-xs text-gray-400">{row.policy}</p>
-                      </div>
+                      <Link to="/imihigo" className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{row.name}</div>
+                          <p className="text-sm text-gray-500">{row.description}</p>
+                          <p className="text-xs text-gray-400">{row.policy}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </Link>
                     ),
                   },
                   {
@@ -415,10 +402,13 @@ export default function ImplementationPage() {
                   {
                     header: 'Project Name',
                     accessor: (row: Project) => (
-                      <div>
-                        <div className="font-medium text-gray-900">{row.name}</div>
-                        <p className="text-sm text-gray-500">{row.program}</p>
-                      </div>
+                      <Link to="/imihigo" className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{row.name}</div>
+                          <p className="text-sm text-gray-500">{row.program}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </Link>
                     ),
                   },
                   {
@@ -488,10 +478,13 @@ export default function ImplementationPage() {
                   {
                     header: 'Activity',
                     accessor: (row: Activity) => (
-                      <div>
-                        <div className="font-medium text-gray-900">{row.name}</div>
-                        <p className="text-sm text-gray-500">{row.project}</p>
-                      </div>
+                      <Link to="/imihigo" className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{row.name}</div>
+                          <p className="text-sm text-gray-500">{row.project}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </Link>
                     ),
                   },
                   {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Edit,
@@ -13,6 +13,7 @@ import {
   FileText,
 } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
+import logoUrl from '/logo.png';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -74,26 +75,6 @@ export default function PolicyDetailPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/policies')}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Policies
-          </Button>
-          <div className="flex gap-3">
-            <Button variant="outline">
-              <FileText className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-            <Button variant="primary">
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Policy
-            </Button>
-          </div>
-        </div>
 
         {/* Policy Header */}
         <Card>
@@ -108,9 +89,20 @@ export default function PolicyDetailPage() {
                 </div>
                 <p className="text-gray-600">{policy.code}</p>
               </div>
-              <Badge variant="warning" className={priorityConfig.color}>
-                {priorityConfig.label} Priority
-              </Badge>
+             
+              
+              <Link to="/implementation" aria-label="View deep policy details" className="ml-3">
+                <div className="group flex flex-col items-center ml-3">
+                  <img
+                    src={logoUrl}
+                    alt="Policy deep details"
+                    style={{ transform: 'perspective(600px) rotateX(8deg) rotateY(-6deg)' }}
+                    className="h-12 w-12 rounded-full shadow-2xl transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <span className="text-xs text-gray-500 mt-1">Tap for details</span>
+                  <span className="sr-only">Tap to view deep information about this policy</span>
+                </div>
+              </Link>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">

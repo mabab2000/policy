@@ -2,7 +2,7 @@ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Target, TrendingUp, Award } from 'lucide-react';
 import { mockKPIs } from '@/services/mockData';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, LineChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CHART_COLORS } from '@/constants';
 
 export default function ImihigoPage() {
@@ -13,13 +13,17 @@ export default function ImihigoPage() {
     target: kpi.target,
   }));
 
+  const progressData = [
+    { month: 'Jan', planned: 20, actual: 18 },
+    { month: 'Feb', planned: 25, actual: 24 },
+    { month: 'Mar', planned: 30, actual: 28 },
+    { month: 'Apr', planned: 35, actual: 33 },
+  ];
+
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Imihigo Performance Contracts</h1>
-          <p className="text-gray-600 mt-1">Track KPIs and performance indicators aligned with national goals</p>
-        </div>
+      <div className="mt-2 space-y-4">
+        
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
@@ -67,6 +71,25 @@ export default function ImihigoPage() {
                 <Bar dataKey="current" fill={CHART_COLORS.primary} name="Current" />
                 <Bar dataKey="target" fill={CHART_COLORS.success} name="Target" />
               </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Planned vs Actual Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={progressData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="planned" stroke={CHART_COLORS.warning} strokeWidth={2} name="Planned" />
+                <Line type="monotone" dataKey="actual" stroke={CHART_COLORS.primary} strokeWidth={2} name="Actual" />
+              </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>

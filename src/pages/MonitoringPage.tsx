@@ -1,4 +1,4 @@
-import Layout from '@/components/layout/Layout';
+ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { BarChart3, TrendingUp, AlertCircle, FileText } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -59,24 +59,7 @@ export default function MonitoringPage() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Planned vs Actual Progress</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={progressData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="planned" stroke={CHART_COLORS.warning} strokeWidth={2} name="Planned" />
-                <Line type="monotone" dataKey="actual" stroke={CHART_COLORS.primary} strokeWidth={2} name="Actual" />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {/* Planned vs Actual Progress moved to Imihigo KPI Performance Overview */}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>

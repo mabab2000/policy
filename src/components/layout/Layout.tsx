@@ -56,53 +56,13 @@ const navigation: NavItem[] = [
     roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
   },
   {
-    icon: <Users className="h-5 w-5" />,
-    label: 'Stakeholders',
-    path: '/stakeholders',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
-    icon: <CheckCircle className="h-5 w-5" />,
-    label: 'Implementation',
-    path: '/implementation',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
-    icon: <Target className="h-5 w-5" />,
-    label: 'Imihigo',
-    path: '/imihigo',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
-    icon: <TrendingUp className="h-5 w-5" />,
-    label: 'Execution',
-    path: '/execution',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
-    icon: <BarChart3 className="h-5 w-5" />,
-    label: 'Monitoring & Evaluation',
-    path: '/monitoring',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
     icon: <MessageSquare className="h-5 w-5" />,
     label: 'Citizen Feedback',
     path: '/citizen-feedback',
     roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
   },
-  {
-    icon: <FolderPlus className="h-5 w-5" />,
-    label: 'Create Project',
-    path: '/projects/create',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
-  {
-    icon: <UserPlus className="h-5 w-5" />,
-    label: 'Create Account',
-    path: '/create-account',
-    roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
-  },
+  
+
   {
     icon: <Scale className="h-5 w-5" />,
     label: 'Legal & Cabinet',
