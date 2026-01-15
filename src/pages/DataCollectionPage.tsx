@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { 
   Upload, 
   Database, 
@@ -12,6 +13,7 @@ import {
   FileText,
   Search
 } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
 import Layout from '@/components/layout/Layout';
 import Button from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -57,12 +59,32 @@ interface AnalysisResult {
   recommendations: string[];
 }
 
+interface ScrapeResult {
+  url: string;
+  pdf_file: string;
+  method: string;
+  content_length: number;
+  document_id: string;
+}
+
+interface ScrapeResponse {
+  results: ScrapeResult[];
+}
+
+type ToastType = 'success' | 'error' | null;
+
 export default function DataCollectionPage() {
+  const { currentProject } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'import' | 'scrape' | 'analysis'>('import');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [scrapeUrl, setScrapeUrl] = useState('');
+  const [isScraping, setIsScraping] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<ToastType>(null);
+  const [scrapedFiles, setScrapedFiles] = useState<ScrapeResult[]>([]);
   const [importJobs] = useState<ImportJob[]>([
     {
       id: '1',
@@ -214,19 +236,98 @@ export default function DataCollectionPage() {
     }
   };
 
-  const handleImport = () => {
-    if (selectedFile) {
-      console.log('Importing file:', selectedFile.name);
-      setIsImportModalOpen(false);
-      setSelectedFile(null);
+  const showToast = (msg: string, type: ToastType = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => {
+      setToastType(null);
+      setToastMessage('');
+    }, 4000);
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      showToast('Please select a file to upload', 'error');
+      return;
+    }
+
+    if (!currentProject?.project_id) {
+      showToast('No project selected. Please create or select a project first.', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('project_id', currentProject.project_id);
+
+      const response = await axios.post('https://policy-files.onrender.com/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.document_id) {
+        showToast(`File uploaded successfully`, 'success');
+        setIsImportModalOpen(false);
+        setSelectedFile(null);
+      } else {
+        showToast('Upload failed: ' + (response.data.message || 'Unknown error'), 'error');
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error.message || 'Failed to upload file';
+      showToast(message, 'error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleScrape = () => {
-    if (scrapeUrl) {
-      console.log('Scraping URL:', scrapeUrl);
-      setIsScrapeModalOpen(false);
-      setScrapeUrl('');
+  const handleScrape = async () => {
+    if (!scrapeUrl) {
+      showToast('Please enter a URL to scrape', 'error');
+      return;
+    }
+
+    if (!currentProject?.project_id) {
+      showToast('No project selected. Please create or select a project first.', 'error');
+      return;
+    }
+
+    setIsScraping(true);
+    try {
+      const requestData = {
+        urls: [scrapeUrl],
+        project_id: currentProject.project_id
+      };
+
+      const response = await axios.post<ScrapeResponse>(
+        'https://policy-scraper.onrender.com/scrape',
+        requestData,
+        {
+          headers: {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.results && response.data.results.length > 0) {
+        setScrapedFiles(prev => [...prev, ...response.data.results]);
+        showToast(
+          `Successfully scraped ${response.data.results.length} URL(s). PDFs generated and saved.`,
+          'success'
+        );
+        setIsScrapeModalOpen(false);
+        setScrapeUrl('');
+      } else {
+        showToast('No data could be scraped from the provided URL', 'error');
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error.message || 'Failed to scrape URL';
+      showToast(message, 'error');
+    } finally {
+      setIsScraping(false);
     }
   };
 
@@ -421,48 +522,78 @@ export default function DataCollectionPage() {
         <Card>
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Scraped Data</h3>
-            <Table<ImportedFile>
-              data={importedFiles}
-              columns={[
-                {
-                  header: 'File Name',
-                  accessor: (row: ImportedFile) => (
-                    <div>
-                      <div className="font-medium text-gray-900">{row.fileName}</div>
-                      <p className="text-sm text-gray-500">{row.fileSize}</p>
-                    </div>
-                  ),
-                },
-                {
-                  header: 'Category',
-                  accessor: (row: ImportedFile) => (
-                    <Badge variant="primary">{row.category}</Badge>
-                  ),
-                },
-                {
-                  header: 'Uploaded',
-                  accessor: 'uploadedAt' as keyof ImportedFile,
-                },
-                {
-                  header: 'Analysed',
-                  accessor: (row: ImportedFile) => (
-                    <div className="flex items-center gap-2">
-                      {row.analysed ? (
-                        <>
-                          <CheckCircle className="h-5 w-5 text-success-600" />
-                          <span className="text-sm text-success-700 font-medium">Yes</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="h-5 w-5 text-warning-600" />
-                          <span className="text-sm text-warning-700 font-medium">Pending</span>
-                        </>
-                      )}
-                    </div>
-                  ),
-                },
-              ]}
-            />
+            {scrapedFiles.length > 0 ? (
+              <Table<ScrapeResult>
+                data={scrapedFiles}
+                columns={[
+                  {
+                    header: 'Source URL',
+                    accessor: (row: ScrapeResult) => (
+                      <div>
+                        <div className="font-medium text-gray-900 max-w-xs truncate">
+                          {new URL(row.url).hostname}
+                        </div>
+                        <p className="text-sm text-gray-500 max-w-xs truncate">{row.url}</p>
+                      </div>
+                    ),
+                  },
+                  {
+                    header: 'Method',
+                    accessor: (row: ScrapeResult) => (
+                      <Badge variant="primary">{row.method}</Badge>
+                    ),
+                  },
+                  {
+                    header: 'Content Size',
+                    accessor: (row: ScrapeResult) => (
+                      <span className="text-sm text-gray-600">
+                        {(row.content_length / 1024).toFixed(2)} KB
+                      </span>
+                    ),
+                  },
+                  {
+                    header: 'PDF File',
+                    accessor: (row: ScrapeResult) => (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-success-600" />
+                        <a 
+                          href={row.pdf_file}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+                        >
+                          Download PDF
+                        </a>
+                      </div>
+                    ),
+                  },
+                  {
+                    header: 'Document ID',
+                    accessor: (row: ScrapeResult) => (
+                      <span className="text-xs text-gray-500 font-mono">
+                        {row.document_id.slice(0, 8)}...
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <Globe className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No scraped data yet</h3>
+                <p className="text-gray-600 mb-4">
+                  Start web scraping to collect data from external sources
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={() => setIsScrapeModalOpen(true)}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Globe className="h-4 w-4" />
+                  Start Web Scraping
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -527,20 +658,7 @@ export default function DataCollectionPage() {
         title="Import Data"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data Category
-            </label>
-            <select className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 transition-colors">
-              <option value="">Select category</option>
-              <option value="demographics">Demographics</option>
-              <option value="healthcare">Healthcare</option>
-              <option value="education">Education</option>
-              <option value="economic">Economic</option>
-              <option value="infrastructure">Infrastructure</option>
-              <option value="agriculture">Agriculture</option>
-            </select>
-          </div>
+          
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -549,7 +667,7 @@ export default function DataCollectionPage() {
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls,.json"
+                accept=".csv,.xlsx,.xls,.json,.pdf,.doc,.docx,.txt"
                 onChange={handleFileUpload}
                 className="hidden"
                 id="file-upload"
@@ -559,7 +677,7 @@ export default function DataCollectionPage() {
                 <p className="text-sm text-gray-600">
                   {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">CSV, Excel, or JSON (max 50MB)</p>
+                <p className="text-xs text-gray-500 mt-1">PDF, Excel, CSV, Word, JSON (max 50MB)</p>
               </label>
             </div>
           </div>
@@ -582,10 +700,11 @@ export default function DataCollectionPage() {
             <Button
               variant="primary"
               onClick={handleImport}
-              disabled={!selectedFile}
+              disabled={!selectedFile || isUploading}
+              isLoading={isUploading}
               className="flex-1"
             >
-              Import Data
+              {isUploading ? 'Uploading...' : 'Import Data'}
             </Button>
           </div>
         </div>
@@ -594,7 +713,7 @@ export default function DataCollectionPage() {
       {/* Scrape Modal */}
       <Modal
         isOpen={isScrapeModalOpen}
-        onClose={() => setIsScrapeModalOpen(false)}
+        onClose={() => !isScraping && setIsScrapeModalOpen(false)}
         title="Web Scraping Setup"
       >
         <div className="space-y-4">
@@ -606,21 +725,25 @@ export default function DataCollectionPage() {
               type="url"
               value={scrapeUrl}
               onChange={(e) => setScrapeUrl(e.target.value)}
-              placeholder="https://data.gov.rw/..."
+              placeholder="https://alliancebioversityciat.org/stories/..."
+              disabled={isScraping}
             />
+            <p className="text-sm text-gray-500 mt-1">
+              Enter a URL to scrape. The system will generate a PDF and extract content.
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data Category
-            </label>
-            <select className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 transition-colors">
-              <option value="">Select category</option>
-              <option value="demographics">Demographics</option>
-              <option value="healthcare">Healthcare</option>
-              <option value="education">Education</option>
-              <option value="economic">Economic</option>
-            </select>
+          <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+            <div className="flex gap-2">
+              <Search className="h-5 w-5 text-blue-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">How it works</p>
+                <p className="text-sm text-blue-800 mt-1">
+                  Our scraper uses Selenium to capture website content, generates a PDF version, 
+                  and provides you with a downloadable document for analysis.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="p-4 bg-warning-50 border-2 border-warning-200 rounded-lg">
@@ -630,26 +753,44 @@ export default function DataCollectionPage() {
                 <p className="text-sm font-medium text-warning-900">Important</p>
                 <p className="text-sm text-warning-800 mt-1">
                   Ensure you have permission to scrape data from the target website.
+                  Respect robots.txt and terms of service.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={() => setIsScrapeModalOpen(false)} className="flex-1">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsScrapeModalOpen(false)} 
+              className="flex-1"
+              disabled={isScraping}
+            >
               Cancel
             </Button>
             <Button
               variant="success"
               onClick={handleScrape}
-              disabled={!scrapeUrl}
+              disabled={!scrapeUrl || isScraping}
+              isLoading={isScraping}
               className="flex-1"
             >
-              Start Scraping
+              {isScraping ? 'Scraping...' : 'Start Scraping'}
             </Button>
           </div>
         </div>
       </Modal>
+
+      {/* Toast Notification */}
+      {toastType && (
+        <div className={`fixed right-4 bottom-4 w-80 p-4 rounded-lg shadow-lg border-2 z-50 ${
+          toastType === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          {toastMessage}
+        </div>
+      )}
       </div>
     </Layout>
   );
