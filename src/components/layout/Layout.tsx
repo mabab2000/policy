@@ -97,7 +97,7 @@ const navigation: NavItem[] = [
 ];
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, currentProject } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -127,10 +127,9 @@ export default function Layout({ children }: LayoutProps) {
                 {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
               <div className="flex items-center ml-4 lg:ml-0">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-600 to-success-600" />
-                <h1 className="ml-3 text-xl font-bold text-gray-900">
-                  polucy 360
-                </h1>
+                <div>
+                  <h1 className="text-lg font-semibold text-gray-900">{(currentProject?.organization || 'Organization') + '/' + (currentProject?.project_name || 'Project')}</h1>
+                </div>
                 {/* collapse toggle moved into sidebar */}
               </div>
             </div>
@@ -143,13 +142,22 @@ export default function Layout({ children }: LayoutProps) {
               >
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                  <p className="text-xs text-gray-500">{user && ROLE_LABELS[user.role]}</p>
+                  <p className="text-xs text-gray-500">{(user as any)?.phone || ''}</p>
                 </div>
-                <img
-                  src={user?.avatar || 'https://ui-avatars.com/api/?name=User'}
-                  alt={user?.name}
-                  className="h-10 w-10 rounded-full border-2 border-primary-300"
-                />
+                <div className="h-10 w-10 rounded-full border-2 border-primary-300 bg-primary-600 text-white flex items-center justify-center font-bold">
+                  {(() => {
+                    const fullName = (user?.name || '') as string;
+                    if (!fullName) return 'U';
+                    const parts = fullName.trim().split(/\s+/);
+                    let initials = '';
+                    if (parts.length === 1) {
+                      initials = parts[0].slice(0, 2).toUpperCase();
+                    } else {
+                      initials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                    }
+                    return initials;
+                  })()}
+                </div>
               </button>
 
               {isProfileOpen && (

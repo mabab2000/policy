@@ -6,7 +6,10 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   token: string | null;
+  projects?: unknown[];
+  currentProject?: { project_name?: string; organization?: string; project_id?: string } | null;
   login: (email: string, password: string) => Promise<string[]>;
+  fetchProfile: (userId?: string) => Promise<void>;
   logout: () => void;
   initializeAuth: () => void;
   hasRole: (roles: UserRole[]) => boolean;
@@ -19,6 +22,13 @@ interface AuthState {
 // Real login against local auth service
 const performLogin = async (email: string, password: string): Promise<{ token: string; project_ids: string[]; user_id?: string }> => {
   const res = await axios.post('https://policy-users-go.onrender.com/api/login', { email, password }, { headers: { 'Content-Type': 'application/json' } });
+  return res.data;
+};
+
+const fetchUserProfile = async (userId: string, token: string) => {
+  const res = await axios.get(`https://policy-users-go.onrender.com/api/users/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   return res.data;
 };
 
@@ -52,6 +62,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
+      // fetch full profile (projects, phone, full_name) if available
+      if (data.user_id) {
+        try {
+          await get().fetchProfile(data.user_id);
+        } catch (e) {
+          // ignore profile fetch errors
+        }
+      }
+
       return projectIds;
     } catch (error) {
       throw error;
@@ -72,10 +91,44 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       try {
         const user = JSON.parse(userStr);
         set({ user, token, isAuthenticated: true });
+        // try to fetch profile in background
+        try {
+          const userId = (user && (user.id as string)) || undefined;
+          if (userId) get().fetchProfile(userId).catch(() => {});
+        } catch (e) {
+          // ignore
+        }
       } catch (error) {
         console.error('Failed to parse user data:', error);
         get().logout();
       }
+    }
+  },
+
+  fetchProfile: async (userId?: string) => {
+    const { token } = get();
+    if (!userId) userId = get().user?.id;
+    if (!userId || !token) return;
+
+    try {
+      const data = await fetchUserProfile(userId, token);
+      const projects = data.projects || [];
+      const projectIds = projects.map((p: any) => p.project_id);
+
+      const updatedUser = {
+        ...(get().user || {}),
+        name: data.user?.full_name || get().user?.name,
+        email: data.user?.email || get().user?.email,
+        phone: data.user?.phone || (get().user as any)?.phone,
+      } as User;
+
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      localStorage.setItem('projects', JSON.stringify(projects));
+      localStorage.setItem('project_ids', JSON.stringify(projectIds));
+
+      set({ user: updatedUser, projects, currentProject: projects[0] || null });
+    } catch (e) {
+      console.error('Failed to fetch user profile', e);
     }
   },
 
