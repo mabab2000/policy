@@ -54,8 +54,15 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Side - Branding */}
         <div className="flex flex-col justify-center">
-          {/* Branding header removed per request (title and logo) */}
-
+          {/* Logo */}
+          <div className="mb-8 flex justify-center">
+            <img 
+              src="/logo.png" 
+              alt="Policy 360 Logo" 
+              className="h-32 w-auto"
+            />
+          </div>
+          
           <div className="space-y-4">
             <div className="flex items-start gap-3">
               <div className="h-8 w-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
