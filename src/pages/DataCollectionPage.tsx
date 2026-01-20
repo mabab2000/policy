@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   Upload, 
@@ -63,7 +63,6 @@ interface DocumentItem {
   status: string;
   document_content: any;
   created_at: string;
-  analysed?: boolean;
 }
 
 interface AnalysisResult {
@@ -83,12 +82,9 @@ interface ScrapeResult {
 
 interface ScrapedDocument {
   id: string;
-  file_name?: string;
-  filename?: string;
+  file_name: string;
   created_at: string;
   status: string;
-  source: string;
-  analysed: boolean | null;
 }
 
 interface ScrapeResponse {
@@ -96,142 +92,6 @@ interface ScrapeResponse {
 }
 
 type ToastType = 'success' | 'error' | null;
-
-const renderSummaryMarkdown = (text: string) => {
-  const nodes: ReactNode[] = [];
-  const listItems: string[] = [];
-
-  const renderInline = (line: string): ReactNode => {
-    const parts: ReactNode[] = [];
-    let remaining = line;
-
-    while (remaining.length) {
-      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-      const linkMatch = remaining.match(/\[(.+?)\]\((https?:\/\/[^\s]+)\)/);
-
-      const nextMatch = [boldMatch, linkMatch]
-        .filter(Boolean)
-        .map(m => (m as RegExpMatchArray))
-        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
-
-      if (!nextMatch || nextMatch.index === undefined) {
-        parts.push(remaining);
-        break;
-      }
-
-      if (nextMatch.index > 0) {
-        parts.push(remaining.slice(0, nextMatch.index));
-      }
-
-      if (nextMatch === boldMatch) {
-        parts.push(<strong key={`b-${parts.length}`} className="font-semibold">{boldMatch[1]}</strong>);
-        remaining = remaining.slice((boldMatch.index ?? 0) + boldMatch[0].length);
-      } else if (nextMatch === linkMatch) {
-        parts.push(
-          <a
-            key={`a-${parts.length}`}
-            href={linkMatch[2]}
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary-600 hover:underline"
-          >
-            {linkMatch[1]}
-          </a>
-        );
-        remaining = remaining.slice((linkMatch.index ?? 0) + linkMatch[0].length);
-      }
-    }
-
-    return parts.length ? parts : line;
-  };
-
-  const flushList = () => {
-    if (listItems.length) {
-      nodes.push(
-        <ul key={`list-${nodes.length}`} className="list-disc list-inside space-y-1 text-sm text-gray-700">
-          {listItems.map((item, idx) => (
-            <li key={`li-${idx}`}>{renderInline(item)}</li>
-          ))}
-        </ul>
-      );
-      listItems.length = 0;
-    }
-  };
-
-  text.split('\n').forEach((rawLine, idx) => {
-    const line = rawLine.trim();
-    if (!line) {
-      flushList();
-      nodes.push(<div key={`spacer-${idx}`} className="h-3" />);
-      return;
-    }
-
-    if (line.startsWith('# ')) {
-      flushList();
-      nodes.push(
-        <h2 key={`h1-${idx}`} className="text-base font-bold text-gray-900 mt-4">
-          {renderInline(line.replace(/^#\s+/, ''))}
-        </h2>
-      );
-      return;
-    }
-
-    if (line.startsWith('## ')) {
-      flushList();
-      nodes.push(
-        <h3 key={`h2-${idx}`} className="text-sm font-semibold text-gray-900 mt-3">
-          {renderInline(line.replace(/^##\s+/, ''))}
-        </h3>
-      );
-      return;
-    }
-
-    if (line.startsWith('### ')) {
-      flushList();
-      nodes.push(
-        <h4 key={`h3-${idx}`} className="text-sm font-semibold text-gray-800 mt-2">
-          {renderInline(line.replace(/^###\s+/, ''))}
-        </h4>
-      );
-      return;
-    }
-
-    if (line.startsWith('#### ')) {
-      flushList();
-      nodes.push(
-        <h5 key={`h4-${idx}`} className="text-xs font-semibold text-gray-800 mt-2">
-          {renderInline(line.replace(/^####\s+/, ''))}
-        </h5>
-      );
-      return;
-    }
-
-    if (line.startsWith('##### ')) {
-      flushList();
-      nodes.push(
-        <h6 key={`h5-${idx}`} className="text-xs font-semibold text-gray-700 mt-2">
-          {renderInline(line.replace(/^#####\s+/, ''))}
-        </h6>
-      );
-      return;
-    }
-
-    if (line.startsWith('- ')) {
-      listItems.push(line.replace(/^-\s+/, ''));
-      return;
-    }
-
-    flushList();
-    nodes.push(
-      <p key={`p-${idx}`} className="text-sm text-gray-700 leading-relaxed">
-        {renderInline(line)}
-      </p>
-    );
-  });
-
-  flushList();
-  return nodes;
-};
 
 export default function DataCollectionPage() {
   const { currentProject } = useAuthStore();
@@ -365,13 +225,12 @@ export default function DataCollectionPage() {
       setScrapedLoading(true);
       setScrapedError(null);
       try {
-        const url = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/processed`;
+        const url = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/scraped`;
         const resp = await axios.get(url, { headers: { accept: 'application/json' } });
-        // Show all processed documents (both analysed and not analysed)
         setScrapedDocs(resp.data.documents || []);
       } catch (err: any) {
-        console.error('Failed to fetch processed documents', err);
-        setScrapedError(err?.message || 'Failed to fetch processed documents');
+        console.error('Failed to fetch scraped documents', err);
+        setScrapedError(err?.message || 'Failed to fetch scraped documents');
       } finally {
         setScrapedLoading(false);
       }
@@ -1047,10 +906,18 @@ export default function DataCollectionPage() {
             ) : scrapedDocs.length === 0 ? (
               <div className="text-center py-12">
                 <Globe className="h-12 w-8 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No processed documents yet</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No scraped data yet</h3>
                 <p className="text-gray-600 mb-4">
-                  Processed documents will appear here
+                  Start web scraping to collect data from external sources
                 </p>
+                <Button
+                  variant="primary"
+                  onClick={() => setIsScrapeModalOpen(true)}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Globe className="h-4 w-4" />
+                  Start Web Scraping
+                </Button>
               </div>
             ) : (
               <>
@@ -1058,8 +925,7 @@ export default function DataCollectionPage() {
                 {(() => {
                   const lower = scrapedSearch.trim().toLowerCase();
                   const filtered = scrapedDocs.filter(d => {
-                    const filename = (d.filename || d.file_name || '').toLowerCase();
-                    const matchesSearch = !lower || filename.includes(lower);
+                    const matchesSearch = !lower || d.file_name.toLowerCase().includes(lower);
                     const matchesStatus = !scrapedStatusFilter || d.status === scrapedStatusFilter;
                     return matchesSearch && matchesStatus;
                   });
@@ -1079,28 +945,22 @@ export default function DataCollectionPage() {
                             header: 'File Name',
                             accessor: (row: ScrapedDocument) => (
                               <div className="max-w-[150px]">
-                                <div className="font-medium text-gray-900 truncate">{row.filename || row.file_name}</div>
+                                <div className="font-medium text-gray-900 truncate">{row.file_name}</div>
                               </div>
                             ),
                           },
                           {
-                            header: 'Source',
+                            header: 'Status',
                             accessor: (row: ScrapedDocument) => (
-                              <Badge variant="primary">{row.source}</Badge>
+                              <Badge variant={row.status === 'pending' ? 'warning' : row.status === 'failed' ? 'danger' : 'primary'}>
+                                {row.status}
+                              </Badge>
                             ),
                           },
                           {
-                            header: 'Date',
+                            header: 'Scraped Date',
                             accessor: (row: ScrapedDocument) => (
                               <span className="text-sm text-gray-600">{formatDate(row.created_at)}</span>
-                            ),
-                          },
-                          {
-                            header: 'Analysed',
-                            accessor: (row: ScrapedDocument) => (
-                              <Badge variant={row.analysed ? 'success' : 'warning'}>
-                                {row.analysed ? 'Yes' : 'No'}
-                              </Badge>
                             ),
                           },
                           {
@@ -1122,6 +982,19 @@ export default function DataCollectionPage() {
                                 </button>
                               );
                             },
+                          },
+                          {
+                            header: 'Process',
+                            accessor: (row: ScrapedDocument) => (
+                              <button
+                                onClick={() => handleProcessDocument(row.id)}
+                                disabled={row.status === 'processed' || processingDocId === row.id}
+                                className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${row.status === 'processed' || processingDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                              >
+                                {processingDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {row.status === 'processed' ? 'Processed' : processingDocId === row.id ? 'Processing...' : 'Process'}
+                              </button>
+                            ),
                           },
                         ]}
                       />
@@ -1168,7 +1041,7 @@ export default function DataCollectionPage() {
                 })),
                 ...scrapedDocs.filter(d => d.status === 'processed').map(d => ({
                   id: d.id,
-                  filename: d.filename || d.file_name,
+                  filename: d.file_name,
                   created_at: d.created_at,
                   source: 'Scrape'
                 }))
@@ -1192,14 +1065,8 @@ export default function DataCollectionPage() {
 
               return (
                 <div className="w-full overflow-x-auto">
-                  <Table<{id: string; filename: string; created_at: string; source: string; analysed?: boolean}>
-                    data={allProcessedDocs
-                      .filter(doc => doc.filename) // Filter out docs with undefined filename
-                      .map(doc => ({
-                        ...doc,
-                        filename: doc.filename || 'Unknown', // Ensure filename is never undefined
-                        analysed: scrapedDocs.find(s => s.id === doc.id)?.analysed ?? documents.find(d => d.id === doc.id)?.analysed ?? false
-                      }))}
+                  <Table<{id: string; filename: string; created_at: string; source: string}>
+                    data={allProcessedDocs}
                     columns={[
                       {
                         header: 'File Name',
@@ -1222,12 +1089,24 @@ export default function DataCollectionPage() {
                         ),
                       },
                       {
-                        header: 'Analysed',
-                        accessor: (row) => (
-                          <Badge variant={row.analysed ? 'success' : 'warning'}>
-                            {row.analysed ? 'Yes' : 'No'}
-                          </Badge>
-                        ),
+                        header: 'Download',
+                        accessor: (row) => {
+                          const handleDownload = async () => {
+                            try {
+                              const resp = await axios.get(`https://policy-files.onrender.com/documents/scrape/${row.id}`);
+                              if (resp.data.preview_url) {
+                                window.open(resp.data.preview_url, '_blank');
+                              }
+                            } catch (err) {
+                              console.error('Failed to get download URL', err);
+                            }
+                          };
+                          return (
+                            <button onClick={handleDownload} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium" title="Download PDF">
+                              <Download className="h-4 w-4" />
+                            </button>
+                          );
+                        },
                       },
                       {
                         header: 'Analyse',
@@ -1248,7 +1127,7 @@ export default function DataCollectionPage() {
                           <button
                             onClick={() => handleViewSummary(row.id)}
                             disabled={summaryPanelLoading && summaryDocId === row.id}
-                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${summaryPanelLoading && summaryDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${summaryPanelLoading && summaryDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-secondary-600 text-white hover:bg-secondary-700'}`}
                           >
                             {summaryPanelLoading && summaryDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
                             {summaryPanelLoading && summaryDocId === row.id ? 'Loading...' : 'View'}
@@ -1439,8 +1318,8 @@ export default function DataCollectionPage() {
               )}
 
               {!summaryPanelLoading && !summaryError && summaryContent && (
-                <div className="prose prose-sm max-w-none">
-                  {renderSummaryMarkdown(summaryContent)}
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+                  {summaryContent}
                 </div>
               )}
             </div>

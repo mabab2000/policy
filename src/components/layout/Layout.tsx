@@ -57,7 +57,7 @@ const navigation: NavItem[] = [
   },
   {
     icon: <BarChart3 className="h-5 w-5" />,
-    label: 'Data Review',
+    label: 'Data View',
     path: '/data-review',
     roles: [UserRole.SUPER_ADMIN, UserRole.MINISTRY_OFFICER, UserRole.DISTRICT_OFFICER, UserRole.SECTOR_OFFICER, UserRole.CITIZEN, UserRole.AUDITOR],
   },

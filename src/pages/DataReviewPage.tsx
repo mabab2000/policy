@@ -1,126 +1,252 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Layout from '@/components/layout/Layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
-import { mockProgressReports } from '@/services/mockData';
-import { formatDate } from '@/lib/utils';
+import { Card } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import { Loader2, BarChart3, TrendingUp, AlertCircle } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+
+interface ChartData {
+  chart_type: string;
+  title: string;
+  labels: string[];
+  values: number[];
+}
+
+interface ProjectResults {
+  project_id: string;
+  charts: ChartData[];
+}
+
+type ToastType = 'success' | 'error' | null;
 
 export default function DataReviewPage() {
-  const [filter, setFilter] = useState<'all' | 'potential' | 'approved' | 'rejected'>('all');
-  const [reports, setReports] = useState(() => [...mockProgressReports]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const pageSize = 5;
+  const { currentProject } = useAuthStore();
+  const [data, setData] = useState<ProjectResults | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<ToastType>(null);
+  const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
 
-  const statusBadge = (status?: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge variant="success">Approved</Badge>;
-      case 'potential':
-        return <Badge variant="warning">Potential</Badge>;
-      case 'rejected':
-        return <Badge variant="danger">Rejected</Badge>;
-      default:
-        return <Badge variant="primary">{status || 'unknown'}</Badge>;
+  const showToast = (msg: string, type: ToastType = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => {
+      setToastType(null);
+      setToastMessage('');
+    }, 4000);
+  };
+
+  useEffect(() => {
+    const fetchChartData = async () => {
+      if (!currentProject?.project_id) {
+        setError('No project selected');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get(
+          `https://policy-pre-analyser.onrender.com/projects/${currentProject.project_id}/results`,
+          {
+            headers: {
+              'accept': 'application/json',
+            },
+          }
+        );
+
+        setData(response.data);
+      } catch (err: any) {
+        const message = err?.response?.data?.message || err.message || 'Failed to fetch chart data';
+        setError(message);
+        showToast(message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChartData();
+  }, [currentProject?.project_id]);
+
+  const handleAnalysisPaspace = async () => {
+    if (!currentProject?.project_id) {
+      showToast('No project selected', 'error');
+      return;
+    }
+
+    setAnalysisLoading(true);
+    try {
+      const resp = await axios.get(
+        `https://policy-pre-analyser.onrender.com/projects/${currentProject.project_id}/organized-results`,
+        { headers: { accept: 'application/json' } }
+      );
+
+      // If the endpoint returns charts, update local data
+      if (resp?.data) {
+        setData(resp.data as ProjectResults);
+      }
+
+      const message = resp?.data?.message || 'Organized results fetched successfully';
+      showToast(message, 'success');
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err.message || 'Failed to fetch organized results';
+      showToast(message, 'error');
+    } finally {
+      setAnalysisLoading(false);
     }
   };
 
-  const filtered = useMemo(() => reports.filter((r) => (filter === 'all' ? true : (r as any).status === filter)), [reports, filter]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const getMaxValue = (values: number[]) => Math.max(...values);
+  const getPercentage = (value: number, max: number) => (value / max) * 100;
 
-  const toggleSelect = (id: string) => {
-    setSelected((s) => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
-  };
-
-  const setStatusForSelected = (status: 'approved' | 'rejected') => {
-    if (selected.length === 0) return;
-    const updated = reports.map(r => selected.includes(r.id) ? { ...r, status } : r);
-    setReports(updated);
-    for (const id of selected) {
-      const idx = mockProgressReports.findIndex(m => m.id === id);
-      if (idx !== -1) mockProgressReports[idx].status = status;
-    }
-    setSelected([]);
+  const renderBarChart = (chart: ChartData) => {
+    const maxValue = getMaxValue(chart.values);
+    
+    return (
+      <Card key={chart.title} className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 className="h-5 w-5 text-primary-600" />
+          <h3 className="text-lg font-semibold text-gray-900">{chart.title}</h3>
+        </div>
+        
+        <div className="space-y-3">
+          {chart.labels.map((label, index) => {
+            const value = chart.values[index];
+            const percentage = getPercentage(value, maxValue);
+            
+            return (
+              <div key={index} className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">{label}</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {value.toLocaleString()}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-primary-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${percentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            Chart Type: {chart.chart_type.replace('_', ' ').toUpperCase()}
+          </div>
+        </div>
+      </Card>
+    );
   };
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Data Review</h1>
-          <p className="text-gray-600 mt-1">Review recent progress reports and manage their status.</p>
-        </div>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Data Review</h1>
+            <p className="text-gray-600 mt-1">
+              Review and analyze chart data from processed documents
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <TrendingUp className="h-4 w-4" />
+              <span>Project: {currentProject?.project_name || 'No project selected'}</span>
+            </div>
 
-        <div className="flex gap-3 items-center">
-          {(['all', 'potential', 'approved', 'rejected'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => { setFilter(s); setPage(1); }}
-              className={`px-3 py-1 rounded ${filter === s ? 'bg-primary-600 text-white' : 'bg-white border-2 border-primary-100 text-gray-700'}`}>
-              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)} ({reports.filter(r => (s === 'all' ? true : (r as any).status === s)).length})
-            </button>
-          ))}
-
-          <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => setStatusForSelected('approved')} className="px-3 py-1 rounded bg-success-600 text-white" disabled={selected.length===0}>Bulk Approve</button>
-            <button onClick={() => setStatusForSelected('rejected')} className="px-3 py-1 rounded bg-danger-600 text-white" disabled={selected.length===0}>Bulk Reject</button>
+            <div>
+              <Button
+                variant="primary"
+                onClick={handleAnalysisPaspace}
+                disabled={!currentProject?.project_id || analysisLoading}
+                className="flex items-center gap-2"
+              >
+                {analysisLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                ) : null}
+                Analysis paspace
+              </Button>
+            </div>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Progress Reports</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y-2 divide-primary-200">
-                <thead className="bg-primary-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left"><input type="checkbox" checked={selected.length>0 && pageItems.every(pi=>selected.includes(pi.id))} onChange={(e)=>{
-                      if(e.target.checked) setSelected(pageItems.map(p=>p.id)); else setSelected([]);
-                    }} /></th>
-                    <th className="px-4 py-2 text-left">Report</th>
-                    <th className="px-4 py-2 text-left">Data (label / value)</th>
-                    <th className="px-4 py-2 text-left">Progress</th>
-                    <th className="px-4 py-2 text-left">Status</th>
-                    <th className="px-4 py-2 text-left">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {pageItems.length === 0 ? (
-                    <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">No reports</td></tr>
-                  ) : pageItems.map((r) => (
-                    <tr key={r.id} className="hover:bg-primary-50">
-                      <td className="px-4 py-3"><input type="checkbox" checked={selected.includes(r.id)} onChange={()=>toggleSelect(r.id)} /></td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">Report #{r.id}</div>
-                        <div className="text-sm text-gray-500">{r.achievements}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        <div><strong>Progress:</strong> {r.progress}%</div>
-                        <div className="text-xs text-gray-500">Challenges: {r.challenges}</div>
-                      </td>
-                      <td className="px-4 py-3">{r.progress}%</td>
-                      <td className="px-4 py-3">{statusBadge((r as any).status)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(r.reportDate)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center py-12">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-8 w-8 text-primary-600 animate-spin" />
+              <span className="text-lg text-gray-600">Loading chart data...</span>
             </div>
+          </div>
+        )}
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-gray-600">Showing {filtered.length === 0 ? 0 : ((page-1)*pageSize)+1} - {Math.min(page*pageSize, filtered.length)} of {filtered.length}</div>
-              <div className="flex items-center gap-2">
-                <button onClick={()=>setPage(p=>Math.max(1,p-1))} className="px-2 py-1 border rounded" disabled={page===1}>Prev</button>
-                <span className="px-2">{page}/{totalPages}</span>
-                <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} className="px-2 py-1 border rounded" disabled={page===totalPages}>Next</button>
+        {/* Error State */}
+        {error && !loading && (
+          <Card className="p-6">
+            <div className="flex items-center gap-3 text-red-600">
+              <AlertCircle className="h-6 w-6" />
+              <div>
+                <h3 className="font-semibold">Error Loading Data</h3>
+                <p className="text-sm mt-1">{error}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </Card>
+        )}
+
+        {/* Charts Grid */}
+        {data && !loading && !error && (
+          <>
+            {data.charts.length === 0 ? (
+              <Card className="p-12">
+                <div className="text-center">
+                  <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No Chart Data Available
+                  </h3>
+                  <p className="text-gray-600">
+                    Process and analyze documents first to generate chart data
+                  </p>
+                </div>
+              </Card>
+            ) : (
+              <>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+                  {data.charts.map((chart) => renderBarChart(chart))}
+                </div>
+                
+                <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-blue-900">Data Summary</h4>
+                      <p className="text-sm text-blue-800 mt-1">
+                        Showing {data.charts.length} charts generated from analyzed documents in project "{currentProject?.project_name}".
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* Toast Notification */}
+        {toastType && (
+          <div className={`fixed right-4 bottom-4 w-80 p-4 rounded-lg shadow-lg border-2 z-50 ${
+            toastType === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            {toastMessage}
+          </div>
+        )}
       </div>
     </Layout>
   );
