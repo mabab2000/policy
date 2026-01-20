@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 import { 
   Upload, 
@@ -11,7 +11,8 @@ import {
   Loader2,
   BarChart3,
   FileText,
-  Search
+  Search,
+  Download
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import Layout from '@/components/layout/Layout';
@@ -21,6 +22,7 @@ import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Table from '@/components/ui/Table';
+import { formatDate, formatDateTime } from '@/lib/utils';
 
 interface DataSource {
   id: string;
@@ -52,6 +54,18 @@ interface ImportedFile {
   category: string;
 }
 
+interface DocumentItem {
+  id: string;
+  project_id: string;
+  filename: string;
+  file_path: string;
+  source: string;
+  status: string;
+  document_content: any;
+  created_at: string;
+  analysed?: boolean;
+}
+
 interface AnalysisResult {
   category: string;
   insights: string[];
@@ -67,11 +81,157 @@ interface ScrapeResult {
   document_id: string;
 }
 
+interface ScrapedDocument {
+  id: string;
+  file_name?: string;
+  filename?: string;
+  created_at: string;
+  status: string;
+  source: string;
+  analysed: boolean | null;
+}
+
 interface ScrapeResponse {
   results: ScrapeResult[];
 }
 
 type ToastType = 'success' | 'error' | null;
+
+const renderSummaryMarkdown = (text: string) => {
+  const nodes: ReactNode[] = [];
+  const listItems: string[] = [];
+
+  const renderInline = (line: string): ReactNode => {
+    const parts: ReactNode[] = [];
+    let remaining = line;
+
+    while (remaining.length) {
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const linkMatch = remaining.match(/\[(.+?)\]\((https?:\/\/[^\s]+)\)/);
+
+      const nextMatch = [boldMatch, linkMatch]
+        .filter(Boolean)
+        .map(m => (m as RegExpMatchArray))
+        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
+
+      if (!nextMatch || nextMatch.index === undefined) {
+        parts.push(remaining);
+        break;
+      }
+
+      if (nextMatch.index > 0) {
+        parts.push(remaining.slice(0, nextMatch.index));
+      }
+
+      if (nextMatch === boldMatch) {
+        parts.push(<strong key={`b-${parts.length}`} className="font-semibold">{boldMatch[1]}</strong>);
+        remaining = remaining.slice((boldMatch.index ?? 0) + boldMatch[0].length);
+      } else if (nextMatch === linkMatch) {
+        parts.push(
+          <a
+            key={`a-${parts.length}`}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary-600 hover:underline"
+          >
+            {linkMatch[1]}
+          </a>
+        );
+        remaining = remaining.slice((linkMatch.index ?? 0) + linkMatch[0].length);
+      }
+    }
+
+    return parts.length ? parts : line;
+  };
+
+  const flushList = () => {
+    if (listItems.length) {
+      nodes.push(
+        <ul key={`list-${nodes.length}`} className="list-disc list-inside space-y-1 text-sm text-gray-700">
+          {listItems.map((item, idx) => (
+            <li key={`li-${idx}`}>{renderInline(item)}</li>
+          ))}
+        </ul>
+      );
+      listItems.length = 0;
+    }
+  };
+
+  text.split('\n').forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      nodes.push(<div key={`spacer-${idx}`} className="h-3" />);
+      return;
+    }
+
+    if (line.startsWith('# ')) {
+      flushList();
+      nodes.push(
+        <h2 key={`h1-${idx}`} className="text-base font-bold text-gray-900 mt-4">
+          {renderInline(line.replace(/^#\s+/, ''))}
+        </h2>
+      );
+      return;
+    }
+
+    if (line.startsWith('## ')) {
+      flushList();
+      nodes.push(
+        <h3 key={`h2-${idx}`} className="text-sm font-semibold text-gray-900 mt-3">
+          {renderInline(line.replace(/^##\s+/, ''))}
+        </h3>
+      );
+      return;
+    }
+
+    if (line.startsWith('### ')) {
+      flushList();
+      nodes.push(
+        <h4 key={`h3-${idx}`} className="text-sm font-semibold text-gray-800 mt-2">
+          {renderInline(line.replace(/^###\s+/, ''))}
+        </h4>
+      );
+      return;
+    }
+
+    if (line.startsWith('#### ')) {
+      flushList();
+      nodes.push(
+        <h5 key={`h4-${idx}`} className="text-xs font-semibold text-gray-800 mt-2">
+          {renderInline(line.replace(/^####\s+/, ''))}
+        </h5>
+      );
+      return;
+    }
+
+    if (line.startsWith('##### ')) {
+      flushList();
+      nodes.push(
+        <h6 key={`h5-${idx}`} className="text-xs font-semibold text-gray-700 mt-2">
+          {renderInline(line.replace(/^#####\s+/, ''))}
+        </h6>
+      );
+      return;
+    }
+
+    if (line.startsWith('- ')) {
+      listItems.push(line.replace(/^-\s+/, ''));
+      return;
+    }
+
+    flushList();
+    nodes.push(
+      <p key={`p-${idx}`} className="text-sm text-gray-700 leading-relaxed">
+        {renderInline(line)}
+      </p>
+    );
+  });
+
+  flushList();
+  return nodes;
+};
 
 export default function DataCollectionPage() {
   const { currentProject } = useAuthStore();
@@ -156,6 +316,105 @@ export default function DataCollectionPage() {
       category: 'Infrastructure'
     }
   ]);
+
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [docsLoading, setDocsLoading] = useState<boolean>(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const [docSearch, setDocSearch] = useState<string>('');
+  const [docStatusFilter, setDocStatusFilter] = useState<string>('');
+  const [docPage, setDocPage] = useState<number>(1);
+  const [docPerPage, setDocPerPage] = useState<number>(10);
+  const [processingDocId, setProcessingDocId] = useState<string | null>(null);
+  const [analysingDocId, setAnalysingDocId] = useState<string | null>(null);
+  const [summaryModalOpen, setSummaryModalOpen] = useState<boolean>(false);
+  const [summaryContent, setSummaryContent] = useState<string>('');
+  const [summaryDocId, setSummaryDocId] = useState<string | null>(null);
+  const [summaryPanelLoading, setSummaryPanelLoading] = useState<boolean>(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!currentProject?.project_id) return;
+      setDocsLoading(true);
+      setDocsError(null);
+      try {
+        const url = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/upload-or-other`;
+        const resp = await axios.get(url, { headers: { accept: 'application/json' } });
+        setDocuments(resp.data.documents || []);
+      } catch (err: any) {
+        console.error('Failed to fetch documents', err);
+        setDocsError(err?.message || 'Failed to fetch documents');
+      } finally {
+        setDocsLoading(false);
+      }
+    };
+
+    fetchDocuments();
+  }, [currentProject?.project_id]);
+  const [scrapedDocs, setScrapedDocs] = useState<ScrapedDocument[]>([]);
+  const [scrapedLoading, setScrapedLoading] = useState<boolean>(false);
+  const [scrapedError, setScrapedError] = useState<string | null>(null);
+  const [scrapedSearch, setScrapedSearch] = useState<string>('');
+  const [scrapedStatusFilter, setScrapedStatusFilter] = useState<string>('');
+  const [scrapedPage, setScrapedPage] = useState<number>(1);
+  const [scrapedPerPage, setScrapedPerPage] = useState<number>(10);
+
+  useEffect(() => {
+    const fetchScrapedDocs = async () => {
+      if (!currentProject?.project_id) return;
+      setScrapedLoading(true);
+      setScrapedError(null);
+      try {
+        const url = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/processed`;
+        const resp = await axios.get(url, { headers: { accept: 'application/json' } });
+        // Show all processed documents (both analysed and not analysed)
+        setScrapedDocs(resp.data.documents || []);
+      } catch (err: any) {
+        console.error('Failed to fetch processed documents', err);
+        setScrapedError(err?.message || 'Failed to fetch processed documents');
+      } finally {
+        setScrapedLoading(false);
+      }
+    };
+
+    fetchScrapedDocs();
+  }, [currentProject?.project_id]);
+  const [summary, setSummary] = useState<any | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      if (!currentProject?.project_id) {
+        setSummary(null);
+        setSummaryLoading(false);
+        return;
+      }
+
+      setSummaryLoading(true);
+      try {
+        const url = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/summary`;
+        const resp = await axios.get(url, { headers: { accept: 'application/json' } });
+        setSummary(resp.data);
+      } catch (err) {
+        console.error('Failed to fetch project summary', err);
+        setSummary(null);
+      } finally {
+        setSummaryLoading(false);
+      }
+    };
+
+    fetchSummary();
+  }, [currentProject?.project_id]);
+
+  const totalDocuments = summary?.total ?? null;
+  const totalSources = summary
+    ? Object.values(summary.sources || {}).reduce((acc: number, s: any) => acc + (s.total || 0), 0)
+    : null;
+  const totalProcessed = summary?.total_processed ?? null;
+  const totalAnalysed = summary?.total_analysed ?? null;
+  const totalPending = summary
+    ? Object.values(summary.sources || {}).reduce((acc: number, s: any) => acc + ((s.status && s.status.pending) || 0), 0)
+    : null;
 
   const [dataSources] = useState<DataSource[]>([
     {
@@ -283,6 +542,106 @@ export default function DataCollectionPage() {
     }
   };
 
+  const handleProcessDocument = async (documentId: string) => {
+    setProcessingDocId(documentId);
+    try {
+      const response = await axios.post('https://policy-scraper.onrender.com/process_document', {
+        document_id: documentId,
+      }, {
+        headers: { 
+          accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+      });
+      
+      if (response.data.status === 'processed') {
+        showToast('Document processed successfully', 'success');
+        // Refresh both documents lists
+        if (currentProject?.project_id) {
+          // Refresh import documents
+          const uploadUrl = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/upload-or-other`;
+          const uploadResp = await axios.get(uploadUrl, { headers: { accept: 'application/json' } });
+          setDocuments(uploadResp.data.documents || []);
+          
+          // Refresh scraped documents
+          const scrapedUrl = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/scraped`;
+          const scrapedResp = await axios.get(scrapedUrl, { headers: { accept: 'application/json' } });
+          setScrapedDocs(scrapedResp.data.documents || []);
+        }
+      } else {
+        showToast('Failed to process document', 'error');
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error.message || 'Failed to process document';
+      showToast(message, 'error');
+    } finally {
+      setProcessingDocId(null);
+    }
+  };
+
+  const handleAnalyseDocument = async (documentId: string) => {
+    setAnalysingDocId(documentId);
+    try {
+      const response = await axios.post('https://policy-pre-processor.onrender.com/document', {
+        document_id: documentId,
+      }, {
+        headers: { 
+          accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+      });
+      
+      if (response.data) {
+        showToast('Document analysed successfully', 'success');
+        // Refresh both documents lists to get updated status
+        if (currentProject?.project_id) {
+          const uploadUrl = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/upload-or-other`;
+          const uploadResp = await axios.get(uploadUrl, { headers: { accept: 'application/json' } });
+          setDocuments(uploadResp.data.documents || []);
+          
+          const scrapedUrl = `https://policy-files.onrender.com/documents/project/${currentProject.project_id}/scraped`;
+          const scrapedResp = await axios.get(scrapedUrl, { headers: { accept: 'application/json' } });
+          setScrapedDocs(scrapedResp.data.documents || []);
+        }
+      } else {
+        showToast('Failed to analyse document', 'error');
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error.message || 'Failed to analyse document';
+      showToast(message, 'error');
+    } finally {
+      setAnalysingDocId(null);
+    }
+  };
+
+  const handleViewSummary = async (documentId: string) => {
+    setSummaryDocId(documentId);
+    setSummaryPanelLoading(true);
+    setSummaryError(null);
+    try {
+      const response = await axios.post('https://policy-pre-processor.onrender.com/summary', {
+        document_id: documentId,
+      }, {
+        headers: {
+          accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (response.data?.summary) {
+        setSummaryContent(response.data.summary);
+        setSummaryModalOpen(true);
+      } else {
+        setSummaryError('No summary returned for this document');
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error.message || 'Failed to load summary';
+      setSummaryError(message);
+    } finally {
+      setSummaryPanelLoading(false);
+    }
+  };
+
   const handleScrape = async () => {
     if (!scrapeUrl) {
       showToast('Please enter a URL to scrape', 'error');
@@ -364,67 +723,102 @@ export default function DataCollectionPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-          <h1 className="text-3xl font-bold text-gray-900">Data Collection & Analysis</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Data Collection & Analysis</h1>
+            <p className="text-gray-600 mt-1">Import, scrape, and analyze data for policy insights</p>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="primary"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Import Data
+            </Button>
+            <Button
+              variant="success"
+              onClick={() => setIsScrapeModalOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Globe className="h-4 w-4" />
+              Web Scrape
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <Button
-            variant="primary"
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Import Data
-          </Button>
-          <Button
-            variant="success"
-            onClick={() => setIsScrapeModalOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Globe className="h-4 w-4" />
-            Web Scrape
-          </Button>
-        </div>
-      </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Data Sources</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">12</p>
+    
+      {/* Detailed Source Breakdown */}
+      {summary && !summaryLoading && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          {/* Scrape Sources */}
+          <div className="bg-gradient-to-br from-white to-blue-50 p-4 rounded-lg border-2 border-blue-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="text-center mb-4">
+              <h3 className="text-base font-semibold text-gray-700 mb-1">Web Scraping</h3>
+              <div className="text-3xl font-bold text-success-600">
+                {summary.sources?.scrape?.total || 0}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Curated from {summary.sources?.scrape?.total || 0} original sources
+              </p>
             </div>
-            <Database className="h-8 w-8 text-primary-600" />
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Records Collected</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">282K</p>
+            
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center p-2 border border-gray-200 rounded">
+                <div className="text-xl font-bold text-gray-700">
+                  {summary.sources?.scrape?.status?.pending || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Pending</p>
+              </div>
+              <div className="text-center p-2 border border-red-200 rounded bg-red-50">
+                <div className="text-xl font-bold text-red-600">
+                  {summary.sources?.scrape?.status?.processed || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Processed</p>
+              </div>
+              <div className="text-center p-2 border border-gray-200 rounded">
+                <div className="text-xl font-bold text-gray-700">
+                  {summary.sources?.scrape?.total || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">All</p>
+              </div>
             </div>
-            <BarChart3 className="h-8 w-8 text-success-600" />
           </div>
-        </Card>
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Active Imports</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">3</p>
+
+          {/* Upload Sources */}
+          <div className="bg-gradient-to-br from-white to-green-50 p-4 rounded-lg border-2 border-green-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="text-center mb-4">
+              <h3 className="text-base font-semibold text-gray-700 mb-1">File Uploads</h3>
+              <div className="text-3xl font-bold text-success-600">
+                {summary.sources?.Upload?.total || 0}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Curated from {summary.sources?.Upload?.total || 0} original files
+              </p>
             </div>
-            <TrendingUp className="h-8 w-8 text-warning-600" />
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Insights Generated</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">47</p>
+            
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center p-2 border border-gray-200 rounded">
+                <div className="text-xl font-bold text-gray-700">
+                  {(summary.sources?.Upload?.total || 0) - (summary.sources?.Upload?.status?.pending || 0)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Processed</p>
+              </div>
+              <div className="text-center p-2 border border-red-200 rounded bg-red-50">
+                <div className="text-xl font-bold text-red-600">
+                  {summary.sources?.Upload?.status?.pending || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Pending</p>
+              </div>
+              <div className="text-center p-2 border border-gray-200 rounded">
+                <div className="text-xl font-bold text-gray-700">
+                  {summary.sources?.Upload?.total || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">All</p>
+              </div>
             </div>
-            <FileText className="h-8 w-8 text-primary-600" />
           </div>
-        </Card>
-      </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b-2 border-gray-200">
@@ -457,7 +851,7 @@ export default function DataCollectionPage() {
                 : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
             }`}
           >
-            Analysis & Insights
+            Analyse
           </button>
         </nav>
       </div>
@@ -465,190 +859,409 @@ export default function DataCollectionPage() {
       {/* Tab Content */}
       {activeTab === 'import' && (
         <div className="space-y-6">
-          {/* Imported Files Table */}
+          {/* Imported Files Table (fetched from API) */}
           <Card>
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Imported Files</h3>
-              <Table<ImportedFile>
-                data={importedFiles}
-                columns={[
-                  {
-                    header: 'File Name',
-                    accessor: (row: ImportedFile) => (
-                      <div>
-                        <div className="font-medium text-gray-900">{row.fileName}</div>
-                        <p className="text-sm text-gray-500">{row.fileSize}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    header: 'Category',
-                    accessor: (row: ImportedFile) => (
-                      <Badge variant="primary">{row.category}</Badge>
-                    ),
-                  },
-                  {
-                    header: 'Uploaded',
-                    accessor: 'uploadedAt' as keyof ImportedFile,
-                  },
-                  {
-                    header: 'Analysed',
-                    accessor: (row: ImportedFile) => (
-                      <div className="flex items-center gap-2">
-                        {row.analysed ? (
-                          <>
-                            <CheckCircle className="h-5 w-5 text-success-600" />
-                            <span className="text-sm text-success-700 font-medium">Yes</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="h-5 w-5 text-warning-600" />
-                            <span className="text-sm text-warning-700 font-medium">Pending</span>
-                          </>
-                        )}
-                      </div>
-                    ),
-                  },
-                ]}
-              />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Imported Files</h3>
+                <div className="flex items-center gap-3">
+                  <Input
+                    placeholder="Search files..."
+                    value={docSearch}
+                    onChange={(e) => { setDocSearch(e.target.value); setDocPage(1); }}
+                    className="w-80"
+                  />
+                  <select
+                    value={docStatusFilter}
+                    onChange={(e) => { setDocStatusFilter(e.target.value); setDocPage(1); }}
+                    className="border border-gray-300 rounded-lg py-2 px-3 bg-white"
+                  >
+                    <option value="">All statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="processed">Processed</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                  <select
+                    value={docPerPage}
+                    onChange={(e) => { setDocPerPage(Number(e.target.value)); setDocPage(1); }}
+                    className="border border-gray-300 rounded-lg py-2 px-3 bg-white"
+                  >
+                    <option value={5}>5 / page</option>
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                  </select>
+                </div>
+              </div>
+
+              {docsLoading ? (
+                <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 text-gray-400 animate-spin" /></div>
+              ) : docsError ? (
+                <div className="py-6 text-center text-red-600">{docsError}</div>
+              ) : (
+                <>
+                  {/* compute filtered & paginated data client-side */}
+                  {(() => {
+                    const lower = docSearch.trim().toLowerCase();
+                    const filtered = documents.filter(d => {
+                      const matchesSearch = !lower || d.filename.toLowerCase().includes(lower) || d.file_path.toLowerCase().includes(lower);
+                      const matchesStatus = !docStatusFilter || d.status === docStatusFilter;
+                      return matchesSearch && matchesStatus;
+                    });
+                    const total = filtered.length;
+                    const totalPages = Math.max(1, Math.ceil(total / docPerPage));
+                    const currentPage = Math.min(docPage, totalPages);
+                    const start = (currentPage - 1) * docPerPage;
+                    const pageItems = filtered.slice(start, start + docPerPage);
+
+                    return (
+                      <>
+                        <div className="w-full overflow-x-auto">
+                          <Table<DocumentItem>
+                          data={pageItems}
+                          columns={[
+                            {
+                              header: 'File Name',
+                              accessor: (row: DocumentItem) => (
+                                <div className="max-w-[150px]">
+                                  <div className="font-medium text-gray-900 truncate">{row.filename}</div>
+                                </div>
+                              ),
+                            },
+                            {
+                              header: 'Status',
+                              accessor: (row: DocumentItem) => (
+                                  <Badge variant={row.status === 'pending' ? 'warning' : row.status === 'failed' ? 'danger' : 'primary'}>
+                                  {row.status}
+                                </Badge>
+                              ),
+                            },
+                            {
+                              header: 'Uploaded',
+                              accessor: (row: DocumentItem) => (
+                                <span className="text-sm text-gray-600">{formatDate(row.created_at)}</span>
+                              ),
+                            },
+                            {
+                              header: 'Download',
+                              accessor: (row: DocumentItem) => {
+                                const handleDownload = async () => {
+                                  try {
+                                    const resp = await axios.get(`https://policy-files.onrender.com/documents/scrape/${row.id}`);
+                                    if (resp.data.preview_url) {
+                                      window.open(resp.data.preview_url, '_blank');
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to get download URL', err);
+                                  }
+                                };
+                                return (
+                                  <button onClick={handleDownload} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium" title="Download PDF">
+                                    <Download className="h-4 w-4" />
+                                  </button>
+                                );
+                              },
+                            },
+                            {
+                              header: 'Process',
+                              accessor: (row: DocumentItem) => (
+                                <button
+                                  onClick={() => handleProcessDocument(row.id)}
+                                  disabled={row.status === 'processed' || processingDocId === row.id}
+                                  className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${row.status === 'processed' || processingDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                >
+                                  {processingDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                                  {row.status === 'processed' ? 'Processed' : processingDocId === row.id ? 'Processing...' : 'Process'}
+                                </button>
+                              ),
+                            },
+                          ]}
+                        />
+                        </div>
+
+                        <div className="flex items-center justify-between mt-4">
+                          <div className="text-sm text-gray-600">Showing {start + 1} - {Math.min(start + pageItems.length, total)} of {total}</div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setDocPage(p => Math.max(1, p - 1))}
+                              disabled={currentPage <= 1}
+                              className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+                            >Prev</button>
+                            <div className="px-3 py-1 border rounded bg-white">{currentPage} / {totalPages}</div>
+                            <button
+                              onClick={() => setDocPage(p => Math.min(totalPages, p + 1))}
+                              disabled={currentPage >= totalPages}
+                              className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+                            >Next</button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
             </div>
           </Card>
-
-          
         </div>
       )}
 
       {activeTab === 'scrape' && (
         <Card>
           <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Scraped Data</h3>
-            {scrapedFiles.length > 0 ? (
-              <Table<ScrapeResult>
-                data={scrapedFiles}
-                columns={[
-                  {
-                    header: 'Source URL',
-                    accessor: (row: ScrapeResult) => (
-                      <div>
-                        <div className="font-medium text-gray-900 max-w-xs truncate">
-                          {new URL(row.url).hostname}
-                        </div>
-                        <p className="text-sm text-gray-500 max-w-xs truncate">{row.url}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    header: 'Method',
-                    accessor: (row: ScrapeResult) => (
-                      <Badge variant="primary">{row.method}</Badge>
-                    ),
-                  },
-                  {
-                    header: 'Content Size',
-                    accessor: (row: ScrapeResult) => (
-                      <span className="text-sm text-gray-600">
-                        {(row.content_length / 1024).toFixed(2)} KB
-                      </span>
-                    ),
-                  },
-                  {
-                    header: 'PDF File',
-                    accessor: (row: ScrapeResult) => (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-success-600" />
-                        <a 
-                          href={row.pdf_file}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary-600 hover:text-primary-800 font-medium"
-                        >
-                          Download PDF
-                        </a>
-                      </div>
-                    ),
-                  },
-                  {
-                    header: 'Document ID',
-                    accessor: (row: ScrapeResult) => (
-                      <span className="text-xs text-gray-500 font-mono">
-                        {row.document_id.slice(0, 8)}...
-                      </span>
-                    ),
-                  },
-                ]}
-              />
-            ) : (
-              <div className="text-center py-12">
-                <Globe className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No scraped data yet</h3>
-                <p className="text-gray-600 mb-4">
-                  Start web scraping to collect data from external sources
-                </p>
-                <Button
-                  variant="primary"
-                  onClick={() => setIsScrapeModalOpen(true)}
-                  className="inline-flex items-center gap-2"
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Scraped Data</h3>
+              <div className="flex items-center gap-3">
+                <Input
+                  placeholder="Search files..."
+                  value={scrapedSearch}
+                  onChange={(e) => { setScrapedSearch(e.target.value); setScrapedPage(1); }}
+                  className="w-80"
+                />
+                <select
+                  value={scrapedStatusFilter}
+                  onChange={(e) => { setScrapedStatusFilter(e.target.value); setScrapedPage(1); }}
+                  className="border border-gray-300 rounded-lg py-2 px-3 bg-white"
                 >
-                  <Globe className="h-4 w-4" />
-                  Start Web Scraping
-                </Button>
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="processed">Processed</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                </select>
+                <select
+                  value={scrapedPerPage}
+                  onChange={(e) => { setScrapedPerPage(Number(e.target.value)); setScrapedPage(1); }}
+                  className="border border-gray-300 rounded-lg py-2 px-3 bg-white"
+                >
+                  <option value={5}>5 / page</option>
+                  <option value={10}>10 / page</option>
+                  <option value={25}>25 / page</option>
+                </select>
               </div>
+            </div>
+
+            {scrapedLoading ? (
+              <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 text-gray-400 animate-spin" /></div>
+            ) : scrapedError ? (
+              <div className="py-6 text-center text-red-600">{scrapedError}</div>
+            ) : scrapedDocs.length === 0 ? (
+              <div className="text-center py-12">
+                <Globe className="h-12 w-8 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No processed documents yet</h3>
+                <p className="text-gray-600 mb-4">
+                  Processed documents will appear here
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* compute filtered & paginated data client-side */}
+                {(() => {
+                  const lower = scrapedSearch.trim().toLowerCase();
+                  const filtered = scrapedDocs.filter(d => {
+                    const filename = (d.filename || d.file_name || '').toLowerCase();
+                    const matchesSearch = !lower || filename.includes(lower);
+                    const matchesStatus = !scrapedStatusFilter || d.status === scrapedStatusFilter;
+                    return matchesSearch && matchesStatus;
+                  });
+                  const total = filtered.length;
+                  const totalPages = Math.max(1, Math.ceil(total / scrapedPerPage));
+                  const currentPage = Math.min(scrapedPage, totalPages);
+                  const start = (currentPage - 1) * scrapedPerPage;
+                  const pageItems = filtered.slice(start, start + scrapedPerPage);
+
+                  return (
+                    <>
+                      <div className="w-full overflow-x-auto">
+                        <Table<ScrapedDocument>
+                        data={pageItems}
+                        columns={[
+                          {
+                            header: 'File Name',
+                            accessor: (row: ScrapedDocument) => (
+                              <div className="max-w-[150px]">
+                                <div className="font-medium text-gray-900 truncate">{row.filename || row.file_name}</div>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: 'Source',
+                            accessor: (row: ScrapedDocument) => (
+                              <Badge variant="primary">{row.source}</Badge>
+                            ),
+                          },
+                          {
+                            header: 'Date',
+                            accessor: (row: ScrapedDocument) => (
+                              <span className="text-sm text-gray-600">{formatDate(row.created_at)}</span>
+                            ),
+                          },
+                          {
+                            header: 'Analysed',
+                            accessor: (row: ScrapedDocument) => (
+                              <Badge variant={row.analysed ? 'success' : 'warning'}>
+                                {row.analysed ? 'Yes' : 'No'}
+                              </Badge>
+                            ),
+                          },
+                          {
+                            header: 'Download',
+                            accessor: (row: ScrapedDocument) => {
+                              const handleDownload = async () => {
+                                try {
+                                  const resp = await axios.get(`https://policy-files.onrender.com/documents/scrape/${row.id}`);
+                                  if (resp.data.preview_url) {
+                                    window.open(resp.data.preview_url, '_blank');
+                                  }
+                                } catch (err) {
+                                  console.error('Failed to get download URL', err);
+                                }
+                              };
+                              return (
+                                <button onClick={handleDownload} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium" title="Download PDF">
+                                  <Download className="h-4 w-4" />
+                                </button>
+                              );
+                            },
+                          },
+                        ]}
+                      />
+                      </div>
+
+                      <div className="flex items-center justify-between mt-4">
+                        <div className="text-sm text-gray-600">Showing {start + 1} - {Math.min(start + pageItems.length, total)} of {total}</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setScrapedPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage <= 1}
+                            className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+                          >Prev</button>
+                          <div className="px-3 py-1 border rounded bg-white">{currentPage} / {totalPages}</div>
+                          <button
+                            onClick={() => setScrapedPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage >= totalPages}
+                            className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+                          >Next</button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </>
             )}
           </div>
         </Card>
       )}
 
       {activeTab === 'analysis' && (
-        <div className="space-y-6">
-          {analysisResults.map((analysis, index) => (
-            <Card key={index}>
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">{analysis.category}</h3>
-                  <Badge variant="primary">{analysis.dataPoints.toLocaleString()} data points</Badge>
-                </div>
+        <Card>
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Processed Documents Ready for Analysis</h3>
+            
+            {(() => {
+              // Combine both documents and scrapedDocs, filter for processed status only
+              const allProcessedDocs = [
+                ...documents.filter(d => d.status === 'processed').map(d => ({
+                  id: d.id,
+                  filename: d.filename,
+                  created_at: d.created_at,
+                  source: 'Upload'
+                })),
+                ...scrapedDocs.filter(d => d.status === 'processed').map(d => ({
+                  id: d.id,
+                  filename: d.filename || d.file_name,
+                  created_at: d.created_at,
+                  source: 'Scrape'
+                }))
+              ];
 
-                <div className="space-y-6">
-                  {/* Insights */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-primary-600" />
-                      Key Insights
-                    </h4>
-                    <div className="space-y-2">
-                      {analysis.insights.map((insight, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-blue-50 border-2 border-blue-200 rounded-lg">
-                          <CheckCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-blue-900">{insight}</p>
-                        </div>
-                      ))}
-                    </div>
+              if (docsLoading || scrapedLoading) {
+                return <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 text-gray-400 animate-spin" /></div>;
+              }
+
+              if (allProcessedDocs.length === 0) {
+                return (
+                  <div className="text-center py-12">
+                    <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No documents ready for analysis</h3>
+                    <p className="text-gray-600">
+                      Process documents first before analysing them
+                    </p>
                   </div>
+                );
+              }
 
-                  {/* Recommendations */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-success-600" />
-                      Policy Recommendations
-                    </h4>
-                    <div className="space-y-2">
-                      {analysis.recommendations.map((recommendation, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-success-50 border-2 border-success-200 rounded-lg">
-                          <CheckCircle className="h-5 w-5 text-success-600 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-success-900">{recommendation}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Button variant="primary" className="w-full sm:w-auto">
-                    Generate Policy Draft from Analysis
-                  </Button>
+              return (
+                <div className="w-full overflow-x-auto">
+                  <Table<{id: string; filename: string; created_at: string; source: string; analysed?: boolean}>
+                    data={allProcessedDocs
+                      .filter(doc => doc.filename) // Filter out docs with undefined filename
+                      .map(doc => ({
+                        ...doc,
+                        filename: doc.filename || 'Unknown', // Ensure filename is never undefined
+                        analysed: scrapedDocs.find(s => s.id === doc.id)?.analysed ?? documents.find(d => d.id === doc.id)?.analysed ?? false
+                      }))}
+                    columns={[
+                      {
+                        header: 'File Name',
+                        accessor: (row) => (
+                          <div className="max-w-[200px]">
+                            <div className="font-medium text-gray-900 truncate">{row.filename}</div>
+                          </div>
+                        ),
+                      },
+                      {
+                        header: 'Source',
+                        accessor: (row) => (
+                          <Badge variant="primary">{row.source}</Badge>
+                        ),
+                      },
+                      {
+                        header: 'Date',
+                        accessor: (row) => (
+                          <span className="text-sm text-gray-600">{formatDate(row.created_at)}</span>
+                        ),
+                      },
+                      {
+                        header: 'Analysed',
+                        accessor: (row) => (
+                          <Badge variant={row.analysed ? 'success' : 'warning'}>
+                            {row.analysed ? 'Yes' : 'No'}
+                          </Badge>
+                        ),
+                      },
+                      {
+                        header: 'Analyse',
+                        accessor: (row) => (
+                          <button
+                            onClick={() => handleAnalyseDocument(row.id)}
+                            disabled={analysingDocId === row.id}
+                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${analysingDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-success-600 text-white hover:bg-success-700'}`}
+                          >
+                            {analysingDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {analysingDocId === row.id ? 'Analysing...' : 'Analyse'}
+                          </button>
+                        ),
+                      },
+                      {
+                        header: 'Summary',
+                        accessor: (row) => (
+                          <button
+                            onClick={() => handleViewSummary(row.id)}
+                            disabled={summaryPanelLoading && summaryDocId === row.id}
+                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${summaryPanelLoading && summaryDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                          >
+                            {summaryPanelLoading && summaryDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {summaryPanelLoading && summaryDocId === row.id ? 'Loading...' : 'View'}
+                          </button>
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              );
+            })()}
+          </div>
+        </Card>
       )}
 
       {/* Import Modal */}
@@ -789,6 +1402,49 @@ export default function DataCollectionPage() {
             : 'bg-red-50 border-red-200 text-red-800'
         }`}>
           {toastMessage}
+        </div>
+      )}
+
+      {summaryModalOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="flex-1 bg-black/30"
+            onClick={() => setSummaryModalOpen(false)}
+          />
+          <div className="w-full sm:w-1/2 lg:w-5/12 xl:w-4/12 h-full bg-white border-l border-gray-200 shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div>
+                <h4 className="text-base font-semibold text-gray-900">Document Summary</h4>
+                {summaryDocId && (
+                  <p className="text-xs text-gray-500 mt-0.5">Document ID: {summaryDocId}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setSummaryModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {summaryPanelLoading && summaryDocId && (
+                <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 text-gray-400 animate-spin" /></div>
+              )}
+
+              {!summaryPanelLoading && summaryError && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                  {summaryError}
+                </div>
+              )}
+
+              {!summaryPanelLoading && !summaryError && summaryContent && (
+                <div className="prose prose-sm max-w-none">
+                  {renderSummaryMarkdown(summaryContent)}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
       </div>
