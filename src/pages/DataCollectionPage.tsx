@@ -191,6 +191,78 @@ export default function DataCollectionPage() {
   const [summaryDocId, setSummaryDocId] = useState<string | null>(null);
   const [summaryPanelLoading, setSummaryPanelLoading] = useState<boolean>(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  
+  // Convert a subset of Markdown to safe HTML for rendering in the summary panel.
+  const markdownToHtml = (input: string) => {
+    if (!input) return '';
+
+    const escapeHtml = (str: string) =>
+      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const processInline = (text: string) => {
+      // escape first
+      let t = escapeHtml(text);
+      // links [text](url)
+      t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-primary-600 underline">$1</a>');
+      // bold **text** or *text*
+      t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      t = t.replace(/\*(.+?)\*/g, '<strong>$1</strong>');
+      // inline code `code`
+      t = t.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>');
+      return t;
+    };
+
+    const lines = input.split(/\r?\n/);
+    let out = '';
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (/^#{1,3}\s+/.test(trimmed)) {
+        if (inList) {
+          out += '</ul>';
+          inList = false;
+        }
+        const m = trimmed.match(/^(#{1,3})\s+(.*)$/);
+        if (m) {
+          const hashes = m[1].length;
+          const content = processInline(m[2]);
+          // Map 3->h1, 2->h2, 1->h3 as requested
+          const tag = hashes === 3 ? 'h1' : hashes === 2 ? 'h2' : 'h3';
+          out += `<${tag} class="font-semibold mt-4 mb-2">${content}</${tag}>`;
+        }
+        continue;
+      }
+
+      if (/^[-*]\s+/.test(trimmed)) {
+        if (!inList) {
+          out += '<ul class="list-disc ml-6 mb-3">';
+          inList = true;
+        }
+        const item = trimmed.replace(/^[-*]\s+/, '');
+        out += `<li>${processInline(item)}</li>`;
+        continue;
+      }
+
+      if (trimmed === '') {
+        if (inList) {
+          out += '</ul>';
+          inList = false;
+        } else {
+          out += '<br/>';
+        }
+        continue;
+      }
+
+      // normal paragraph
+      out += `<p class="mb-2 text-sm text-gray-700">${processInline(trimmed)}</p>`;
+    }
+
+    if (inList) out += '</ul>';
+    return out;
+  };
 
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -1127,7 +1199,8 @@ export default function DataCollectionPage() {
                           <button
                             onClick={() => handleViewSummary(row.id)}
                             disabled={summaryPanelLoading && summaryDocId === row.id}
-                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${summaryPanelLoading && summaryDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-secondary-600 text-white hover:bg-secondary-700'}`}
+                            className={`text-sm px-3 py-1 rounded flex items-center gap-2 ${summaryPanelLoading && summaryDocId === row.id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                            title="View summary"
                           >
                             {summaryPanelLoading && summaryDocId === row.id && <Loader2 className="h-4 w-4 animate-spin" />}
                             {summaryPanelLoading && summaryDocId === row.id ? 'Loading...' : 'View'}
@@ -1318,8 +1391,8 @@ export default function DataCollectionPage() {
               )}
 
               {!summaryPanelLoading && !summaryError && summaryContent && (
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                  {summaryContent}
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap not-prose">
+                  <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryContent) }} />
                 </div>
               )}
             </div>

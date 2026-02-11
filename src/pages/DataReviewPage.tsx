@@ -101,43 +101,398 @@ export default function DataReviewPage() {
   const getMaxValue = (values: number[]) => Math.max(...values);
   const getPercentage = (value: number, max: number) => (value / max) * 100;
 
-  const renderBarChart = (chart: ChartData) => {
+  const renderLineChart = (chart: ChartData) => {
     const maxValue = getMaxValue(chart.values);
-    
+    const minValue = Math.min(...chart.values);
+    const range = maxValue - minValue || 1;
+    const width = 700;
+    const height = 350;
+    const padding = 60;
+    const bottomPadding = 80;
+
+    const xStep = (width - 2 * padding) / (chart.values.length - 1 || 1);
+    const yScale = (height - padding - bottomPadding) / range;
+
+    const points = chart.values.map((val, idx) => {
+      const x = padding + idx * xStep;
+      const y = height - bottomPadding - ((val - minValue) * yScale);
+      return `${x},${y}`;
+    }).join(' ');
+
     return (
-      <Card key={chart.title} className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart3 className="h-5 w-5 text-primary-600" />
-          <h3 className="text-lg font-semibold text-gray-900">{chart.title}</h3>
+      <Card key={chart.title} className="p-6 shadow-md hover:shadow-lg transition-shadow">
+        <div className="flex items-center gap-2 mb-6">
+          <TrendingUp className="h-6 w-6 text-emerald-600" />
+          <h3 className="text-xl font-bold text-gray-900">{chart.title}</h3>
         </div>
         
-        <div className="space-y-3">
+        <div className="w-full overflow-x-auto bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" style={{ minHeight: '300px' }}>
+            {/* Grid lines */}
+            {[0, 1, 2, 3, 4].map(i => {
+              const y = padding + (i * (height - padding - bottomPadding) / 4);
+              return (
+                <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+              );
+            })}
+            
+            {/* Area under line */}
+            <polygon
+              points={`${padding},${height - bottomPadding} ${points} ${width - padding},${height - bottomPadding}`}
+              fill="url(#lineGradient)"
+              opacity="0.3"
+            />
+            <defs>
+              <linearGradient id="lineGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.1" />
+              </linearGradient>
+            </defs>
+            
+            {/* Line */}
+            <polyline
+              points={points}
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            
+            {/* Data points and labels */}
+            {chart.values.map((val, idx) => {
+              const x = padding + idx * xStep;
+              const y = height - bottomPadding - ((val - minValue) * yScale);
+              return (
+                <g key={idx}>
+                  <circle cx={x} cy={y} r="6" fill="white" stroke="#3b82f6" strokeWidth="3" />
+                  <text x={x} y={y - 15} textAnchor="middle" fontSize="13" fontWeight="600" fill="#1e293b">
+                    {val.toLocaleString()}
+                  </text>
+                  <text x={x} y={height - bottomPadding + 25} textAnchor="middle" fontSize="12" fill="#475569" fontWeight="500">
+                    {chart.labels[idx]}
+                  </text>
+                </g>
+              );
+            })}
+            
+            {/* Y-axis labels */}
+            {[0, 1, 2, 3, 4].map(i => {
+              const val = maxValue - (i * range / 4);
+              const y = padding + (i * (height - padding - bottomPadding) / 4);
+              return (
+                <text key={i} x={padding - 15} y={y + 5} textAnchor="end" fontSize="13" fill="#64748b" fontWeight="500">
+                  {Math.round(val).toLocaleString()}
+                </text>
+              );
+            })}
+          </svg>
+        </div>
+        
+        <div className="mt-4 pt-4 border-t-2 border-gray-200">
+          <div className="text-sm text-gray-600 font-medium">
+            📊 {chart.chart_type.replace('_', ' ').toUpperCase()}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  const renderPieChart = (chart: ChartData) => {
+    const total = chart.values.reduce((sum, val) => sum + val, 0);
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+    
+    let currentAngle = -90;
+    const slices = chart.values.map((value, idx) => {
+      const percentage = (value / total) * 100;
+      const angle = (value / total) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
+
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+      const x1 = 150 + 100 * Math.cos(startRad);
+      const y1 = 150 + 100 * Math.sin(startRad);
+      const x2 = 150 + 100 * Math.cos(endRad);
+      const y2 = 150 + 100 * Math.sin(endRad);
+      const largeArc = angle > 180 ? 1 : 0;
+
+      return { startAngle, endAngle, percentage, value, x1, y1, x2, y2, largeArc, color: colors[idx % colors.length] };
+    });
+
+    return (
+      <Card key={chart.title} className="p-6 shadow-md hover:shadow-lg transition-shadow">
+        <div className="flex items-center gap-2 mb-6">
+          <BarChart3 className="h-6 w-6 text-purple-600" />
+          <h3 className="text-xl font-bold text-gray-900">{chart.title}</h3>
+        </div>
+        
+        <div className="flex flex-col md:flex-row gap-8 items-center bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-lg">
+          <div className="relative">
+            <svg viewBox="0 0 300 300" className="w-72 h-72">
+              {slices.map((slice, idx) => (
+                <g key={idx}>
+                  <path
+                    d={`M 150 150 L ${slice.x1} ${slice.y1} A 100 100 0 ${slice.largeArc} 1 ${slice.x2} ${slice.y2} Z`}
+                    fill={slice.color}
+                    stroke="white"
+                    strokeWidth="3"
+                    className="hover:opacity-80 transition-opacity cursor-pointer"
+                  />
+                </g>
+              ))}
+              <circle cx="150" cy="150" r="50" fill="white" />
+              <text x="150" y="145" textAnchor="middle" fontSize="16" fontWeight="600" fill="#1f2937">Total</text>
+              <text x="150" y="165" textAnchor="middle" fontSize="20" fontWeight="700" fill="#3b82f6">{total.toLocaleString()}</text>
+            </svg>
+          </div>
+          
+          <div className="flex-1 space-y-3 w-full">
+            {chart.labels.map((label, idx) => {
+              const slice = slices[idx];
+              return (
+                <div key={idx} className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-md flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800 truncate">{label}</span>
+                        <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
+                          {slice.value.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="flex-1 bg-gray-200 rounded-full h-2">
+                          <div className="h-2 rounded-full transition-all" style={{ width: `${slice.percentage}%`, backgroundColor: slice.color }}></div>
+                        </div>
+                        <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">{slice.percentage.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
+        <div className="mt-4 pt-4 border-t-2 border-gray-200">
+          <div className="text-sm text-gray-600 font-medium">
+            📊 {chart.chart_type.replace('_', ' ').toUpperCase()}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  const renderHistogram = (chart: ChartData) => {
+    const maxValue = getMaxValue(chart.values);
+    const numBars = chart.values.length;
+    const totalWidth = Math.max(800, numBars * 100);
+    const height = 400;
+    const padding = 60;
+    const bottomPadding = 100;
+    const barWidth = (totalWidth - 2 * padding) / numBars;
+
+    return (
+      <Card key={chart.title} className="p-6 shadow-md hover:shadow-lg transition-shadow">
+        <div className="flex items-center gap-2 mb-6">
+          <BarChart3 className="h-6 w-6 text-indigo-600" />
+          <h3 className="text-xl font-bold text-gray-900">{chart.title}</h3>
+        </div>
+        
+        <div className="w-full overflow-x-auto bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-lg">
+          <svg viewBox={`0 0 ${totalWidth} ${height}`} className="w-full h-auto" style={{ minHeight: '350px' }}>
+            {/* Grid lines */}
+            {[0, 1, 2, 3, 4, 5].map(i => {
+              const y = padding + (i * (height - padding - bottomPadding) / 5);
+              return (
+                <line key={i} x1={padding} y1={y} x2={totalWidth - padding} y2={y} stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4 4" />
+              );
+            })}
+            
+            {/* Y-axis */}
+            <line x1={padding} y1={padding} x2={padding} y2={height - bottomPadding} stroke="#64748b" strokeWidth="2" />
+            
+            {/* X-axis */}
+            <line x1={padding} y1={height - bottomPadding} x2={totalWidth - padding} y2={height - bottomPadding} stroke="#64748b" strokeWidth="2" />
+            
+            {/* Y-axis labels */}
+            {[0, 1, 2, 3, 4, 5].map(i => {
+              const val = maxValue - (i * maxValue / 5);
+              const y = padding + (i * (height - padding - bottomPadding) / 5);
+              return (
+                <text key={i} x={padding - 15} y={y + 5} textAnchor="end" fontSize="14" fill="#475569" fontWeight="600">
+                  {Math.round(val).toLocaleString()}
+                </text>
+              );
+            })}
+            
+            {/* Bars */}
+            {chart.values.map((val, idx) => {
+              const barHeight = ((val / maxValue) * (height - padding - bottomPadding));
+              const x = padding + idx * barWidth + barWidth * 0.15;
+              const y = height - bottomPadding - barHeight;
+              const width = barWidth * 0.7;
+              const barColor = `hsl(${220 + idx * 20}, 70%, 55%)`;
+              
+              return (
+                <g key={idx}>
+                  {/* Bar shadow */}
+                  <rect
+                    x={x + 3}
+                    y={y + 3}
+                    width={width}
+                    height={barHeight}
+                    fill="#000000"
+                    opacity="0.1"
+                    rx="6"
+                  />
+                  
+                  {/* Main bar with gradient */}
+                  <defs>
+                    <linearGradient id={`barGrad${idx}`} x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor={barColor} stopOpacity="1" />
+                      <stop offset="100%" stopColor={barColor} stopOpacity="0.7" />
+                    </linearGradient>
+                  </defs>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={barHeight}
+                    fill={`url(#barGrad${idx})`}
+                    stroke={barColor}
+                    strokeWidth="2"
+                    rx="6"
+                    className="hover:opacity-80 transition-opacity cursor-pointer"
+                  />
+                  
+                  {/* Value label on top of bar */}
+                  <text
+                    x={x + width / 2}
+                    y={y - 10}
+                    textAnchor="middle"
+                    fontSize="15"
+                    fill="#1e293b"
+                    fontWeight="700"
+                  >
+                    {val.toLocaleString()}
+                  </text>
+                  
+                  {/* X-axis label */}
+                  <text
+                    x={x + width / 2}
+                    y={height - bottomPadding + 25}
+                    textAnchor="middle"
+                    fontSize="13"
+                    fill="#475569"
+                    fontWeight="600"
+                  >
+                    {chart.labels[idx].length > 15 ? chart.labels[idx].substring(0, 12) + '...' : chart.labels[idx]}
+                  </text>
+                  
+                  {/* Full label if truncated */}
+                  {chart.labels[idx].length > 15 && (
+                    <text
+                      x={x + width / 2}
+                      y={height - bottomPadding + 42}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="#64748b"
+                      fontWeight="500"
+                    >
+                      {chart.labels[idx].substring(12)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        
+        {/* Data summary table */}
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 border-b-2 border-gray-300">
+              <tr>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700">Category</th>
+                <th className="px-4 py-2 text-right font-semibold text-gray-700">Value</th>
+                <th className="px-4 py-2 text-right font-semibold text-gray-700">Percentage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chart.labels.map((label, idx) => {
+                const total = chart.values.reduce((a, b) => a + b, 0);
+                const percentage = ((chart.values[idx] / total) * 100).toFixed(1);
+                return (
+                  <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-800">{label}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-gray-900">{chart.values[idx].toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{percentage}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        
+        <div className="mt-4 pt-4 border-t-2 border-gray-200">
+          <div className="text-sm text-gray-600 font-medium">
+            📊 {chart.chart_type.replace('_', ' ').toUpperCase()} • Total: {chart.values.reduce((a, b) => a + b, 0).toLocaleString()}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  const renderBarChart = (chart: ChartData) => {
+    const maxValue = getMaxValue(chart.values);
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    
+    return (
+      <Card key={chart.title} className="p-6 shadow-md hover:shadow-lg transition-shadow">
+        <div className="flex items-center gap-2 mb-6">
+          <BarChart3 className="h-6 w-6 text-blue-600" />
+          <h3 className="text-xl font-bold text-gray-900">{chart.title}</h3>
+        </div>
+        
+        <div className="space-y-4 bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-lg">
           {chart.labels.map((label, index) => {
             const value = chart.values[index];
             const percentage = getPercentage(value, maxValue);
+            const barColor = colors[index % colors.length];
             
             return (
-              <div key={index} className="space-y-1">
+              <div key={index} className="space-y-2 bg-white p-3 rounded-lg shadow-sm">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-700">{label}</span>
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-gray-800">{label}</span>
+                  <span className="text-sm font-bold text-gray-900 px-3 py-1 bg-gray-100 rounded-full">
                     {value.toLocaleString()}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-primary-600 h-2.5 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${percentage}%` }}
-                  ></div>
+                <div className="relative">
+                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                    <div 
+                      className="h-4 rounded-full transition-all duration-500 ease-out relative"
+                      style={{ 
+                        width: `${percentage}%`,
+                        background: `linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%)`
+                      }}
+                    >
+                      <div className="absolute inset-0 bg-white opacity-20"></div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-600 mt-1 inline-block">{percentage.toFixed(1)}%</span>
                 </div>
               </div>
             );
           })}
         </div>
         
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500">
-            Chart Type: {chart.chart_type.replace('_', ' ').toUpperCase()}
+        <div className="mt-4 pt-4 border-t-2 border-gray-200">
+          <div className="text-sm text-gray-600 font-medium">
+            📊 {chart.chart_type.replace('_', ' ').toUpperCase()}
           </div>
         </div>
       </Card>
@@ -218,7 +573,30 @@ export default function DataReviewPage() {
             ) : (
               <>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
-                  {data.charts.map((chart) => renderBarChart(chart))}
+                  {data.charts.map((chart) => {
+                    // Use pie chart for 3-4 values
+                    if (chart.values.length >= 3 && chart.values.length <= 4) {
+                      return renderPieChart(chart);
+                    }
+                    
+                    // Use histogram for 5 or more values
+                    if (chart.values.length >= 5) {
+                      return renderHistogram(chart);
+                    }
+                    
+                    // For 1-2 values, respect the chart_type
+                    switch (chart.chart_type) {
+                      case 'line_chart':
+                        return renderLineChart(chart);
+                      case 'pie_chart':
+                        return renderPieChart(chart);
+                      case 'histogram':
+                        return renderHistogram(chart);
+                      case 'bar_chart':
+                      default:
+                        return renderBarChart(chart);
+                    }
+                  })}
                 </div>
                 
                 <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
