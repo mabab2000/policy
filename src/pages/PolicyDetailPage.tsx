@@ -29,6 +29,28 @@ export default function PolicyDetailPage() {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Map policy status to Badge variant
+  const getStatusBadgeVariant = (status: PolicyStatus): 'primary' | 'success' | 'warning' | 'gray' | 'blue' | 'danger' => {
+    switch (status) {
+      case PolicyStatus.COMPLETED:
+        return 'success';
+      case PolicyStatus.APPROVED:
+        return 'success';
+      case PolicyStatus.REJECTED:
+        return 'danger';
+      case PolicyStatus.LEGAL_REVIEW:
+      case PolicyStatus.EVALUATION:
+        return 'warning';
+      case PolicyStatus.DRAFT:
+        return 'gray';
+      case PolicyStatus.STAKEHOLDER_CONSULTATION:
+      case PolicyStatus.MONITORING:
+        return 'blue';
+      default:
+        return 'primary';
+    }
+  };
+
   useEffect(() => {
     if (id) {
       loadPolicy(id);
@@ -38,10 +60,57 @@ export default function PolicyDetailPage() {
   const loadPolicy = async (policyId: string) => {
     try {
       setLoading(true);
-      const data = await mockApi.policies.getById(policyId);
-      setPolicy(data ?? null);
-    } catch (error) {
+      
+      // Fetch from API endpoint
+      const response = await fetch(`https://policy-users-go.onrender.com/api/policies/${policyId}`, {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load policy: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Policy Detail API Response:', result);
+      
+      // Map API response to local format
+      const p = result.policy;
+      const mappedPolicy: Policy = {
+        id: p.id,
+        code: p.code,
+        title: p.title,
+        description: p.description || '',
+        problemStatement: p.problem_statement || '',
+        targetPopulation: p.target_population || '',
+        objectives: typeof p.objectives === 'string' ? [p.objectives] : (p.objectives || []),
+        status: PolicyStatus.DRAFT,
+        priority: (p.priority_level?.toUpperCase() || 'MEDIUM') as any,
+        ministry: p.responsible_ministry,
+        responsibleOfficer: '',
+        alignmentVision2050: p.alignment_vision_2050 ? '✓ Aligned with Rwanda Vision 2050' : 'Not aligned',
+        alignmentNST: p.alignment_nst ? '✓ Aligned with National Strategy for Transformation' : 'Not aligned',
+        budget: p.budget,
+        startDate: p.start_date,
+        endDate: p.end_date,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        version: p.version || 1,
+        createdBy: p.created_by || '',
+      };
+      
+      setPolicy(mappedPolicy);
+    } catch (error: any) {
       console.error('Failed to load policy:', error);
+      // Fallback to mock data
+      try {
+        const data = await mockApi.policies.getById(policyId);
+        setPolicy(data ?? null);
+      } catch (e) {
+        setPolicy(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -83,7 +152,7 @@ export default function PolicyDetailPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-3xl font-bold text-gray-900">{policy.title}</h1>
-                  <Badge className={`${statusConfig.bgColor} ${statusConfig.color} border-2`}>
+                  <Badge variant={getStatusBadgeVariant(policy.status)}>
                     {statusConfig.label}
                   </Badge>
                 </div>
@@ -162,7 +231,11 @@ export default function PolicyDetailPage() {
               <CardTitle>Description</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700">{policy.description}</p>
+              {policy.description ? (
+                <p className="text-gray-700">{policy.description}</p>
+              ) : (
+                <p className="text-gray-400 italic">No description available</p>
+              )}
             </CardContent>
           </Card>
 
@@ -171,27 +244,33 @@ export default function PolicyDetailPage() {
               <CardTitle>Problem Statement</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700">{policy.problemStatement}</p>
+              {policy.problemStatement ? (
+                <p className="text-gray-700">{policy.problemStatement}</p>
+              ) : (
+                <p className="text-gray-400 italic">No problem statement available</p>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Objectives */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Policy Objectives</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {policy.objectives.map((objective, index) => (
-                <li key={index} className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-success-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">{objective}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        {policy.objectives && policy.objectives.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Policy Objectives</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-3">
+                {policy.objectives.map((objective, index) => (
+                  <li key={index} className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-success-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700">{objective}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Strategic Alignment */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -200,7 +279,14 @@ export default function PolicyDetailPage() {
               <CardTitle>Vision 2050 Alignment</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700">{policy.alignmentVision2050}</p>
+              <div className="flex items-center gap-2">
+                {policy.alignmentVision2050 === 'Aligned with Vision 2050' ? (
+                  <CheckCircle className="h-5 w-5 text-success-600" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-gray-400" />
+                )}
+                <p className="text-gray-700">{policy.alignmentVision2050}</p>
+              </div>
             </CardContent>
           </Card>
 
@@ -209,7 +295,14 @@ export default function PolicyDetailPage() {
               <CardTitle>NST Alignment</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700">{policy.alignmentNST}</p>
+              <div className="flex items-center gap-2">
+                {policy.alignmentNST === 'Aligned with NST' ? (
+                  <CheckCircle className="h-5 w-5 text-success-600" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-gray-400" />
+                )}
+                <p className="text-gray-700">{policy.alignmentNST}</p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -220,14 +313,18 @@ export default function PolicyDetailPage() {
             <CardTitle>Additional Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Target Population</p>
-              <p className="text-gray-900 mt-1">{policy.targetPopulation}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">Responsible Officer</p>
-              <p className="text-gray-900 mt-1">{policy.responsibleOfficer}</p>
-            </div>
+            {policy.targetPopulation && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">Target Population</p>
+                <p className="text-gray-900 mt-1">{policy.targetPopulation}</p>
+              </div>
+            )}
+            {policy.responsibleOfficer && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">Responsible Officer</p>
+                <p className="text-gray-900 mt-1">{policy.responsibleOfficer}</p>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-4 pt-4 border-t-2 border-primary-100">
               <div>
                 <p className="text-sm font-medium text-gray-600">Version</p>

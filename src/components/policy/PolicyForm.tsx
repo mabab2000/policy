@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PolicyPriority } from '@/types';
@@ -12,14 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 
 const policySchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters'),
-  code: z.string().min(3, 'Policy code is required'),
   description: z.string().min(50, 'Description must be at least 50 characters'),
   objectives: z.string().min(20, 'Objectives are required'),
   problemStatement: z.string().min(30, 'Problem statement must be at least 30 characters'),
   targetPopulation: z.string().min(10, 'Target population is required'),
   priority: z.nativeEnum(PolicyPriority),
-  alignmentVision2050: z.string().min(20, 'Vision 2050 alignment is required'),
-  alignmentNST: z.string().min(20, 'NST alignment is required'),
+  alignmentVision2050: z.boolean(),
+  alignmentNST: z.boolean(),
   ministry: z.string().min(1, 'Ministry selection is required'),
 });
 
@@ -46,10 +45,22 @@ const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function Polic
     register,
     handleSubmit,
     trigger,
+    control,
     formState: { errors },
   } = useForm<PolicyFormData>({
     resolver: zodResolver(policySchema),
-    defaultValues: initialData,
+    defaultValues: {
+      title: '',
+      description: '',
+      objectives: '',
+      problemStatement: '',
+      targetPopulation: '',
+      priority: PolicyPriority.MEDIUM,
+      alignmentVision2050: false,
+      alignmentNST: false,
+      ministry: '',
+      ...initialData,
+    },
   });
 
   // objectives are handled as a single textarea value via react-hook-form
@@ -64,7 +75,7 @@ const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function Polic
     },
     validateStep: async (step: number) => {
       const stepFields: Record<number, string[]> = {
-        1: ['title', 'code', 'description', 'problemStatement', 'targetPopulation'],
+        1: ['title', 'description', 'problemStatement', 'targetPopulation'],
         2: ['objectives'],
         3: ['alignmentVision2050', 'alignmentNST'],
         4: ['ministry', 'priority'],
@@ -84,22 +95,13 @@ const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function Polic
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Policy Title"
-                {...register('title')}
-                error={errors.title?.message}
-                placeholder="e.g., Digital Rwanda 2030 Strategy"
-                required
-              />
-              <Input
-                label="Policy Code"
-                {...register('code')}
-                error={errors.code?.message}
-                placeholder="e.g., POL-2024-001"
-                required
-              />
-            </div>
+            <Input
+              label="Policy Title"
+              {...register('title')}
+              error={errors.title?.message}
+              placeholder="e.g., Digital Rwanda 2030 Strategy"
+              required
+            />
 
             <Textarea
               label="Description"
@@ -155,23 +157,43 @@ const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function Polic
             <CardTitle>Strategic Alignment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              label="Alignment with Vision 2050"
-              {...register('alignmentVision2050')}
-              error={errors.alignmentVision2050?.message}
-              placeholder="How does this policy align with Rwanda Vision 2050?"
-              rows={3}
-              required
-            />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <input
+                  type="checkbox"
+                  id="alignmentVision2050"
+                  {...register('alignmentVision2050')}
+                  className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label htmlFor="alignmentVision2050" className="flex-1 text-sm font-medium text-gray-900 cursor-pointer">
+                  This policy aligns with Rwanda Vision 2050
+                </label>
+              </div>
+              {errors.alignmentVision2050?.message && (
+                <p className="text-sm text-red-600">{errors.alignmentVision2050.message}</p>
+              )}
 
-            <Textarea
-              label="Alignment with National Strategy for Transformation (NST)"
-              {...register('alignmentNST')}
-              error={errors.alignmentNST?.message}
-              placeholder="How does this policy support NST priority areas?"
-              rows={3}
-              required
-            />
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <input
+                  type="checkbox"
+                  id="alignmentNST"
+                  {...register('alignmentNST')}
+                  className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label htmlFor="alignmentNST" className="flex-1 text-sm font-medium text-gray-900 cursor-pointer">
+                  This policy aligns with the National Strategy for Transformation (NST)
+                </label>
+              </div>
+              {errors.alignmentNST?.message && (
+                <p className="text-sm text-red-600">{errors.alignmentNST.message}</p>
+              )}
+            </div>
+
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> Policies should align with Rwanda's national development frameworks to ensure coherence and strategic impact.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -183,26 +205,47 @@ const PolicyForm = forwardRef<PolicyFormHandles, PolicyFormProps>(function Polic
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                label="Responsible Ministry"
-                {...register('ministry')}
-                options={RWANDA_MINISTRIES.map(m => ({ value: m, label: m }))}
-                error={errors.ministry?.message}
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Responsible Ministry <span className="text-red-500">*</span>
+                </label>
+                <Controller
+                  name="ministry"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      {...field}
+                      options={[
+                        { value: '', label: 'Select a ministry...' },
+                        ...RWANDA_MINISTRIES.map(m => ({ value: m, label: m }))
+                      ]}
+                      error={errors.ministry?.message}
+                    />
+                  )}
+                />
+              </div>
 
-              <Select
-                label="Priority Level"
-                {...register('priority')}
-                options={[
-                  { value: PolicyPriority.CRITICAL, label: 'Critical' },
-                  { value: PolicyPriority.HIGH, label: 'High' },
-                  { value: PolicyPriority.MEDIUM, label: 'Medium' },
-                  { value: PolicyPriority.LOW, label: 'Low' },
-                ]}
-                error={errors.priority?.message}
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Priority Level <span className="text-red-500">*</span>
+                </label>
+                <Controller
+                  name="priority"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      {...field}
+                      options={[
+                        { value: PolicyPriority.CRITICAL, label: 'Critical' },
+                        { value: PolicyPriority.HIGH, label: 'High' },
+                        { value: PolicyPriority.MEDIUM, label: 'Medium' },
+                        { value: PolicyPriority.LOW, label: 'Low' },
+                      ]}
+                      error={errors.priority?.message}
+                    />
+                  )}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

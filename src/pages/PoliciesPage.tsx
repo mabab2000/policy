@@ -16,7 +16,6 @@ import { POLICY_STATUS_CONFIG, POLICY_PRIORITY_CONFIG } from '@/constants';
 import { mockApi } from '@/services/mockData';
 import { formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
-import { UserRole } from '@/types';
 
 export default function PoliciesPage() {
   const navigate = useNavigate();
@@ -26,6 +25,17 @@ export default function PoliciesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | null>(null);
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => {
+      setToastType(null);
+      setToastMessage('');
+    }, 4000);
+  };
 
   useEffect(() => {
     loadPolicies();
@@ -34,10 +44,49 @@ export default function PoliciesPage() {
   const loadPolicies = async () => {
     try {
       setLoading(true);
-      const data = await mockApi.policies.getAll();
-      setPolicies(data);
-    } catch (error) {
+      // Fetch from new API endpoint
+      const response = await fetch('https://policy-users-go.onrender.com/api/policies', {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load policies: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('API Response:', result);
+      
+      // Map API response to local format
+      const mappedPolicies = (result.policies || []).map((p: any) => ({
+        id: p.policy_id,
+        code: p.code,
+        title: p.title,
+        description: '', // Not in list response
+        status: PolicyStatus.DRAFT, // Default status
+        priority: (p.priority_level?.toUpperCase() || 'MEDIUM') as PolicyPriority,
+        ministry: p.responsible_ministry,
+        responsibleOfficer: '', // Not in API response
+        createdAt: p.created_at,
+        updatedAt: p.created_at, // Use created_at as fallback
+        version: 1, // Default version
+      }));
+      
+      console.log('Mapped Policies:', mappedPolicies);
+      setPolicies(mappedPolicies);
+    } catch (error: any) {
       console.error('Failed to load policies:', error);
+      // Don't show error toast on first load, just use fallback
+      // Fallback to mock data on error
+      try {
+        const data = await mockApi.policies.getAll();
+        setPolicies(data);
+      } catch (e) {
+        console.error('Failed to load mock data:', e);
+        setPolicies([]); // Set empty array to prevent undefined errors
+      }
     } finally {
       setLoading(false);
     }
@@ -57,6 +106,28 @@ export default function PoliciesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<PolicyFormHandles | null>(null);
 
+  // Map policy status to Badge variant
+  const getStatusBadgeVariant = (status: PolicyStatus): 'primary' | 'success' | 'warning' | 'gray' | 'blue' | 'danger' => {
+    switch (status) {
+      case PolicyStatus.COMPLETED:
+        return 'success';
+      case PolicyStatus.APPROVED:
+        return 'success';
+      case PolicyStatus.REJECTED:
+        return 'danger';
+      case PolicyStatus.LEGAL_REVIEW:
+      case PolicyStatus.EVALUATION:
+        return 'warning';
+      case PolicyStatus.DRAFT:
+        return 'gray';
+      case PolicyStatus.STAKEHOLDER_CONSULTATION:
+      case PolicyStatus.MONITORING:
+        return 'blue';
+      default:
+        return 'primary';
+    }
+  };
+
   const PolicyCard = ({ policy }: { policy: Policy }) => {
     const statusConfig = POLICY_STATUS_CONFIG[policy.status];
     const priorityConfig = POLICY_PRIORITY_CONFIG[policy.priority];
@@ -69,21 +140,32 @@ export default function PoliciesPage() {
         <div className="p-6 space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Policies</h1>
-              <p className="text-gray-600">Manage and track policy development lifecycle</p>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors line-clamp-2">
+                {policy.title}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">{policy.code}</p>
             </div>
+            <Badge variant={getStatusBadgeVariant(policy.status)}>{statusConfig.label}</Badge>
           </div>
+
+          {/* Description */}
+          {policy.description && (
+            <p className="text-sm text-gray-600 line-clamp-2">{policy.description}</p>
+          )}
+
           {/* Details */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Building className="h-4 w-4" />
               <span>{policy.ministry}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <User className="h-4 w-4" />
-              <span>{policy.responsibleOfficer}</span>
-            </div>
+            {policy.responsibleOfficer && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <User className="h-4 w-4" />
+                <span>{policy.responsibleOfficer}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Calendar className="h-4 w-4" />
               <span>Created {formatDate(policy.createdAt)}</span>
@@ -107,7 +189,13 @@ export default function PoliciesPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Policies</h1>
+            <p className="text-gray-600">Manage and track policy development lifecycle</p>
+          </div>
+        </div>
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -260,17 +348,43 @@ export default function PoliciesPage() {
         <PolicyForm
           ref={formRef}
           onSubmit={async (data) => {
-            // Prepare data similar to CreatePolicyPage
-            const objectives = data.objectives.split('\n').filter((o: string) => o.trim());
-            const policyData = {
-              ...data,
-              objectives,
-              status: PolicyStatus.DRAFT,
-              responsibleOfficer: user?.name || '',
-              createdBy: user?.id || '',
-            };
-            await mockApi.policies.create(policyData);
-            alert('Policy created successfully!');
+            try {
+              // Map form data to API format
+              const policyPayload = {
+                title: data.title,
+                description: data.description,
+                problem_statement: data.problemStatement,
+                target_population: data.targetPopulation,
+                objectives: data.objectives,
+                alignment_vision_2050: data.alignmentVision2050,
+                alignment_nst: data.alignmentNST,
+                responsible_ministry: data.ministry,
+                priority_level: data.priority,
+              };
+
+              // Call the new API endpoint
+              const response = await fetch('https://policy-users-go.onrender.com/api/policies', {
+                method: 'POST',
+                headers: {
+                  'accept': 'application/json',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(policyPayload),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Failed to create policy: ${response.statusText}`);
+              }
+
+              const result = await response.json();
+              console.log('Policy created:', result.policy);
+              showToast(`Policy created successfully! Code: ${result.policy?.code || 'N/A'}`, 'success');
+            } catch (err: any) {
+              console.error('Error creating policy:', err);
+              showToast(err.message || 'Failed to create policy. Please try again.', 'error');
+              throw err;
+            }
           }}
           isSubmitting={isSubmitting}
           showActions={false}
@@ -278,9 +392,17 @@ export default function PoliciesPage() {
         />
       </Modal>
 
+      {/* Toast Notification */}
+      {toastType && (
+        <div className={`fixed right-4 bottom-4 w-80 p-4 rounded-lg shadow-lg border-2 z-50 ${
+          toastType === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          {toastMessage}
+        </div>
+      )}
       
     </Layout>
   );
 }
-
-

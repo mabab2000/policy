@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import PolicyForm from '@/components/policy/PolicyForm';
-import { mockApi } from '@/services/mockData';
-import { PolicyStatus } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 
 export default function CreatePolicyPage() {
@@ -15,25 +13,42 @@ export default function CreatePolicyPage() {
     try {
       setIsSubmitting(true);
       
-      // Convert objectives string to array
-      const objectives = data.objectives.split('\n').filter((o: string) => o.trim());
-      
-      const policyData = {
-        ...data,
-        objectives,
-        status: PolicyStatus.DRAFT,
-        responsibleOfficer: user?.name || '',
-        createdBy: user?.id || '',
+      // Map form data to API format
+      const policyPayload = {
+        title: data.title,
+        description: data.description,
+        problem_statement: data.problemStatement,
+        target_population: data.targetPopulation,
+        objectives: data.objectives,
+        alignment_vision_2050: data.alignmentVision2050,
+        alignment_nst: data.alignmentNST,
+        responsible_ministry: data.ministry,
+        priority_level: data.priority,
       };
 
-      await mockApi.policies.create(policyData);
+      // Call the API endpoint
+      const response = await fetch('https://policy-users-go.onrender.com/api/policies', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(policyPayload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to create policy: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Policy created:', result.policy);
       
-      // Show success message (in production, use a toast notification)
-      alert('Policy created successfully!');
+      alert(`Policy created successfully! Code: ${result.policy?.code || 'N/A'}`);
       navigate('/policies');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create policy:', error);
-      alert('Failed to create policy. Please try again.');
+      alert(error.message || 'Failed to create policy. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
